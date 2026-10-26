@@ -7,6 +7,7 @@ enum Prefs {
     static let autoRest = "pref.autoRest"
     static let healthSync = "pref.healthSync"
     static let haptics = "pref.haptics"
+    static let voiceCues = "pref.voiceCues"
 
     static func bool(_ key: String, default value: Bool) -> Bool {
         UserDefaults.standard.object(forKey: key) as? Bool ?? value

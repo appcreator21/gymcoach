@@ -24,10 +24,10 @@ final class HealthKitManager {
         }
     }
 
-    func saveWorkout(start: Date, end: Date) async {
+    func saveWorkout(start: Date, end: Date, activity: HKWorkoutActivityType = .traditionalStrengthTraining) async {
         guard isAvailable else { return }
         let config = HKWorkoutConfiguration()
-        config.activityType = .traditionalStrengthTraining
+        config.activityType = activity
         config.locationType = .indoor
         let builder = HKWorkoutBuilder(healthStore: store, configuration: config, device: .local())
         do {

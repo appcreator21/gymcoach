@@ -79,6 +79,7 @@ model User {
   gyms              Gym[]                                 @relation("GymOwner")
   mcpAccessTokens   McpAccessToken[]
   mcpBackfillAudits McpHistoricalEquipmentBackfillAudit[]
+  challengeEntries  ChallengeEntry[]
   activeGymId       String?
   activeGym         Gym?                                  @relation("ActiveGym", fields: [activeGymId], references: [id], onDelete: SetNull)
 }
@@ -619,4 +620,38 @@ model ProgramTemplate {
   createdAt   DateTime @default(now())
 
   @@index([createdAt])
+}
+
+enum ChallengeMetric {
+  WORKOUTS
+  SETS
+  VOLUME
+}
+
+// Time boxed competition created by an admin. Users opt in by joining; the
+// leaderboard is computed from their finished sessions inside the window, so
+// nothing is stored per score. Only the join row carries the user.
+model Challenge {
+  id          String           @id @default(cuid())
+  title       String
+  description String?
+  metric      ChallengeMetric
+  startsAt    DateTime
+  endsAt      DateTime
+  createdById String
+  createdAt   DateTime         @default(now())
+  entries     ChallengeEntry[]
+
+  @@index([endsAt])
+}
+
+model ChallengeEntry {
+  challengeId String
+  challenge   Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt    DateTime  @default(now())
+
+  @@id([challengeId, userId])
+  @@index([userId])
 }

@@ -23,6 +23,24 @@ your programs, history, bodyweight and AI coach are all shared with the web app.
   editor for any client or yourself.
 - Units (kg or lb), bodyweight logging, silent re-login via the Keychain.
 
+## Surba coaching features
+
+- Plan with Surba: choose a goal (build muscle, strength, powerlifting, bodyweight,
+  sculpt, general), days, session length, equipment and focus. Surba drafts the
+  program, you preview it and start it as your active plan.
+- Quick workout: pick where you are (full gym, home, hotel, no equipment), how long
+  you have and what to hit. Surba builds one workout and you start it right away.
+  These live in a "Quick Workouts" program that is never your active plan.
+- Weekly review: Surba analyzes your week and proposes changes (sets, reps, rest,
+  loads). Tick the ones you want and apply them to your plan in one tap.
+- Classes: guided HIIT, cardio, core, yoga and mobility sessions with an interval
+  timer, haptics, a 3-2-1 count-in and optional voice cues. Saved to Apple Health.
+- Challenges: admins create time boxed challenges (workouts, sets or volume). You opt
+  in by joining and appear on the leaderboard as first name and last initial only.
+
+Server: apply the new migration (`20261028090000_add_challenges`). Everything else
+uses the existing AI provider configuration.
+
 ## Admin access
 
 Set `ADMIN_EMAILS=you@example.com` in the server environment (comma separated),

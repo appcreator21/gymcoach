@@ -734,3 +734,111 @@ struct AdminProgramView: View {
         }
     }
 }
+
+// MARK: Challenges
+
+struct AdminChallengesView: View {
+    @State private var items: [Challenge] = []
+    @State private var loading = true
+    @State private var showNew = false
+    @State private var error: String?
+
+    var body: some View {
+        List {
+            ForEach(items) { c in
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(c.title).font(.headline)
+                    Text("\(c.metricLabel)  -  \(c.participants) joined").font(.caption).foregroundStyle(.secondary)
+                    Text("\(c.startsAt.formatted(date: .abbreviated, time: .omitted)) to \(c.endsAt.formatted(date: .abbreviated, time: .omitted))")
+                        .font(.caption2).foregroundStyle(.tertiary)
+                }
+                .swipeActions { Button("Delete", role: .destructive) { Task { await delete(c) } } }
+            }
+            if let error { Text(error).font(.footnote).foregroundStyle(.red) }
+        }
+        .scrollContentBackground(.hidden)
+        .overlay {
+            if loading { ProgressView() }
+            else if items.isEmpty { Text("No challenges yet").foregroundStyle(.secondary) }
+        }
+        .navigationTitle("Challenges")
+        .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { showNew = true } label: { Image(systemName: "plus") } } }
+        .sheet(isPresented: $showNew, onDismiss: { Task { await load() } }) { NewChallengeSheet() }
+        .task { await load() }
+        .refreshable { await load() }
+    }
+
+    private func load() async {
+        do { items = try await APIClient.shared.get("/api/admin/challenges"); error = nil } catch { self.error = error.localizedDescription }
+        loading = false
+    }
+
+    private func delete(_ c: Challenge) async {
+        do {
+            _ = try await APIClient.shared.raw("DELETE", "/api/admin/challenges/\(c.id)")
+            items.removeAll { $0.id == c.id }
+        } catch { self.error = error.localizedDescription }
+    }
+}
+
+struct NewChallengeSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = ""
+    @State private var details = ""
+    @State private var metric = "WORKOUTS"
+    @State private var starts = Calendar.current.startOfDay(for: Date())
+    @State private var ends = Calendar.current.date(byAdding: .day, value: 7, to: Calendar.current.startOfDay(for: Date())) ?? Date()
+    @State private var busy = false
+    @State private var error: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section { TextField("Title, e.g. 7 day workout streak", text: $title) }
+                Section("Details") { TextEditor(text: $details).frame(minHeight: 80) }
+                Section("Ranked by") {
+                    Picker("Metric", selection: $metric) {
+                        Text("Workouts finished").tag("WORKOUTS")
+                        Text("Working sets").tag("SETS")
+                        Text("Total volume").tag("VOLUME")
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                }
+                Section("When") {
+                    DatePicker("Starts", selection: $starts)
+                    DatePicker("Ends", selection: $ends, in: starts...)
+                }
+                if let error { Section { Text(error).foregroundStyle(.red) } }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Theme.background)
+            .navigationTitle("New challenge")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create") { Task { await create() } }
+                        .disabled(busy || title.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+    }
+
+    private func create() async {
+        busy = true
+        defer { busy = false }
+        let iso = ISO8601DateFormatter()
+        var body: [String: Any] = [
+            "title": title, "metric": metric,
+            "startsAt": iso.string(from: starts), "endsAt": iso.string(from: ends),
+        ]
+        let d = details.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !d.isEmpty { body["description"] = d }
+        do {
+            _ = try await APIClient.shared.raw("POST", "/api/admin/challenges", json: body)
+            Haptics.success()
+            dismiss()
+        } catch { self.error = error.localizedDescription }
+    }
+}

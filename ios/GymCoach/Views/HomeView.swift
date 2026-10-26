@@ -21,6 +21,7 @@ struct HomeView: View {
                     ReadinessCard()
                     tiles
                     upNext
+                    ExploreSection()
                     recent
                 }
                 .padding(.horizontal, 16)

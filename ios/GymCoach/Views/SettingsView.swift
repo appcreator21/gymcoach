@@ -6,6 +6,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.keepAwake) private var keepAwake = true
     @AppStorage(Prefs.autoRest) private var autoRest = true
     @AppStorage(Prefs.healthSync) private var healthSync = false
+    @AppStorage(Prefs.voiceCues) private var voiceCues = true
     @AppStorage(Prefs.haptics) private var haptics = true
     @State private var healthMessage: String?
 
@@ -40,6 +41,7 @@ struct SettingsView: View {
                 }
                 Section("Workouts") {
                     Toggle("Keep screen awake", isOn: $keepAwake)
+                    Toggle("Voice cues in classes", isOn: $voiceCues)
                     Toggle("Start rest timer after each set", isOn: $autoRest)
                 }
                 Section {

@@ -54,6 +54,7 @@ struct AdminView: View {
                     adminLink("Clients", icon: "person.3.fill") { AdminUsersView() }
                     adminLink("Templates", icon: "square.stack.3d.up.fill") { AdminTemplatesView() }
                     adminLink("Announcements", icon: "megaphone.fill") { AdminAnnouncementsView() }
+                    adminLink("Challenges", icon: "flag.checkered") { AdminChallengesView() }
                     adminLink("My exercise library", icon: "dumbbell.fill") { ExerciseLibraryView(userId: nil, title: "My exercises") }
                 }
                 .padding(.horizontal, 16)
