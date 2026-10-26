@@ -39,7 +39,7 @@ struct ProgressTab: View {
                 } else {
                     Chart(points) { p in
                         BarMark(x: .value("Week", p.date, unit: .weekOfYear), y: .value("Volume", p.value))
-                            .foregroundStyle(Theme.gradient)
+                            .foregroundStyle(Theme.accent)
                             .cornerRadius(6)
                     }
                     .chartXAxis { AxisMarks(values: .stride(by: .weekOfYear, count: 2)) { _ in AxisValueLabel(format: .dateTime.month(.abbreviated).day()) } }
@@ -81,7 +81,7 @@ struct ProgressTab: View {
                                 .lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round))
                             AreaMark(x: .value("Date", p.date), y: .value("e1RM", p.value))
                                 .interpolationMethod(.catmullRom)
-                                .foregroundStyle(LinearGradient(colors: [Theme.mint.opacity(0.35), .clear], startPoint: .top, endPoint: .bottom))
+                                .foregroundStyle(Theme.mint.opacity(0.18))
                             PointMark(x: .value("Date", p.date), y: .value("e1RM", p.value))
                                 .foregroundStyle(Theme.mint)
                         }
@@ -168,7 +168,7 @@ struct LogBodyweightSheet: View {
                     busy = false
                 }
             }
-            .buttonStyle(GradientButtonStyle())
+            .buttonStyle(PrimaryButtonStyle())
             .disabled(busy || value.isEmpty)
         }
         .padding(20)

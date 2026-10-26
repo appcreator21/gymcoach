@@ -23,31 +23,38 @@ struct RootView: View {
     var body: some View {
         ZStack {
             AppBackground()
-            if app.isBooting {
+            if app.isBooting || (app.isSignedIn && app.profile == nil) {
                 ProgressView().controlSize(.large)
+            } else if app.isSignedIn, app.profile?.onboardedAt == nil {
+                OnboardingView().transition(.opacity)
             } else if app.isSignedIn {
-                MainTabs()
+                MainTabs().transition(.opacity)
             } else {
-                LoginView()
+                LoginView().transition(.opacity)
             }
         }
+        .animation(.easeInOut(duration: 0.45), value: app.isSignedIn)
+        .animation(.easeInOut(duration: 0.45), value: app.profile?.onboardedAt)
     }
 }
 
 struct MainTabs: View {
     @Environment(AppState.self) private var app
+    @State private var tab = 0
 
     var body: some View {
-        TabView {
-            HomeView().tabItem { Label("Today", systemImage: "flame.fill") }
-            HistoryView().tabItem { Label("History", systemImage: "calendar") }
-            ProgressTab().tabItem { Label("Progress", systemImage: "chart.line.uptrend.xyaxis") }
-            CoachView().tabItem { Label("Surba", systemImage: "sparkles") }
-            SettingsView().tabItem { Label("You", systemImage: "person.crop.circle") }
+        TabView(selection: $tab) {
+            HomeView().tabItem { Label("Today", systemImage: "flame.fill") }.tag(0)
+            HistoryView().tabItem { Label("History", systemImage: "calendar") }.tag(1)
+            ProgressTab().tabItem { Label("Progress", systemImage: "chart.line.uptrend.xyaxis") }.tag(2)
+            CoachView().tabItem { Label("Surba", systemImage: "sparkles") }.tag(3)
+            SettingsView().tabItem { Label("You", systemImage: "person.crop.circle") }.tag(4)
             if app.profile?.isAdmin == true {
-                AdminView().tabItem { Label("Admin", systemImage: "shield.lefthalf.filled") }
+                AdminView().tabItem { Label("Admin", systemImage: "shield.lefthalf.filled") }.tag(5)
             }
         }
-        .toolbarBackground(.ultraThinMaterial, for: .tabBar)
+        .toolbarBackground(Theme.background, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
+        .onChange(of: tab) { _, _ in Haptics.select() }
     }
 }

@@ -1,26 +1,19 @@
 import SwiftUI
 
 enum Theme {
-    static let accent = Color(red: 0.49, green: 0.36, blue: 1.0)
-    static let accent2 = Color(red: 1.0, green: 0.36, blue: 0.64)
+    // One flat accent. No gradients anywhere in the app.
+    static let accent = Color(red: 1.0, green: 0.42, blue: 0.13)
+    static let accent2 = Color(red: 0.40, green: 0.68, blue: 1.0)
     static let mint = Color(red: 0.25, green: 0.88, blue: 0.70)
     static let amber = Color(red: 1.0, green: 0.72, blue: 0.25)
-    static let bgTop = Color(red: 0.05, green: 0.05, blue: 0.10)
-    static let bgBottom = Color(red: 0.09, green: 0.06, blue: 0.16)
-
-    static var gradient: LinearGradient {
-        LinearGradient(colors: [accent, accent2], startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
+    static let background = Color(white: 0.04)
+    static let card = Color(white: 0.11)
+    static let field = Color(white: 0.14)
 }
 
 struct AppBackground: View {
     var body: some View {
-        ZStack {
-            LinearGradient(colors: [Theme.bgTop, Theme.bgBottom], startPoint: .top, endPoint: .bottom)
-            Circle().fill(Theme.accent.opacity(0.25)).frame(width: 320).blur(radius: 90).offset(x: -140, y: -300)
-            Circle().fill(Theme.accent2.opacity(0.16)).frame(width: 280).blur(radius: 90).offset(x: 160, y: 120)
-        }
-        .ignoresSafeArea()
+        Theme.background.ignoresSafeArea()
     }
 }
 
@@ -32,25 +25,26 @@ struct GlassCard<Content: View>: View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
-            )
+            .background(Theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 
-struct GradientButtonStyle: ButtonStyle {
+/// Flat white button with a light haptic on press. The one primary action style.
+struct PrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(.headline, design: .rounded))
-            .foregroundStyle(.white)
+            .foregroundStyle(.black)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 15)
-            .background(Theme.gradient, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .shadow(color: Theme.accent.opacity(0.45), radius: 14, y: 6)
+            .padding(.vertical, 16)
+            .background(Color.white.opacity(isEnabled ? 1 : 0.25), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.spring(response: 0.3), value: configuration.isPressed)
+            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: configuration.isPressed)
+            .onChange(of: configuration.isPressed) { _, pressed in
+                if pressed { Haptics.soft() }
+            }
     }
 }
 
@@ -91,7 +85,7 @@ struct ProgressRing: View {
             Circle().stroke(Color.white.opacity(0.1), lineWidth: lineWidth)
             Circle()
                 .trim(from: 0, to: min(max(progress, 0), 1))
-                .stroke(Theme.gradient, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .stroke(Theme.accent, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                 .rotationEffect(.degrees(-90))
                 .animation(.easeOut(duration: 0.6), value: progress)
         }

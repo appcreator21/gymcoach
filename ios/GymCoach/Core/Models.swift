@@ -113,6 +113,7 @@ struct Profile: Codable, Hashable {
     var goal: String?
     var weeklyFrequency: Int?
     var isAdmin: Bool? = nil
+    var onboardedAt: String? = nil
 
     var firstName: String {
         (displayName ?? email.split(separator: "@").first.map(String.init) ?? "Athlete")

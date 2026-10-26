@@ -5,7 +5,9 @@ import Observation
 @MainActor
 final class AppState {
     // Connection
-    var serverURL: String = UserDefaults.standard.string(forKey: "serverURL") ?? ""
+    // The hosted Surba Fit backend. Users never type a server address.
+    static let defaultServerURL = "https://surbafit.matthuber21.workers.dev"
+    var serverURL: String = AppState.defaultServerURL
     var email: String = UserDefaults.standard.string(forKey: "email") ?? ""
     var isSignedIn = false
     var isBooting = true
@@ -34,14 +36,8 @@ final class AppState {
 
     private func applyServerURL() {
         var text = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !text.isEmpty && !text.contains("://") { text = "http://" + text }
+        if !text.isEmpty && !text.contains("://") { text = "https://" + text }
         api.baseURL = URL(string: text)
-    }
-
-    func saveServer(_ url: String) {
-        serverURL = url
-        UserDefaults.standard.set(url, forKey: "serverURL")
-        applyServerURL()
     }
 
     func bootstrap() async {
@@ -59,8 +55,8 @@ final class AppState {
     func login(email: String, password: String) async throws {
         _ = try await api.raw("POST", "/api/auth/login", json: ["email": email, "password": password], retry: false)
         remember(email: email, password: password)
-        isSignedIn = true
         await refresh()
+        isSignedIn = true
     }
 
     func register(email: String, password: String, name: String) async throws {
@@ -68,8 +64,26 @@ final class AppState {
         if !name.isEmpty { body["displayName"] = name }
         _ = try await api.raw("POST", "/api/auth/register", json: body, retry: false)
         remember(email: email, password: password)
-        isSignedIn = true
         await refresh()
+        isSignedIn = true
+    }
+
+    /// Sends the intake answers; the server seeds the client's memory file.
+    func submitOnboarding(_ answers: [String: Any]) async throws {
+        _ = try await api.raw("POST", "/api/onboarding", json: answers)
+    }
+
+    /// Reloads the profile, which flips the app from onboarding to the main tabs
+    /// right away; the rest of the data loads in the background.
+    func completeOnboarding() async {
+        if let fresh: Profile = try? await api.get("/api/profile") { profile = fresh }
+        Task { await refresh() }
+    }
+
+    func loadMemory() async -> String {
+        struct MemoryResponse: Decodable { let memory: String }
+        let response: MemoryResponse? = try? await api.get("/api/memory")
+        return response?.memory ?? ""
     }
 
     private func remember(email: String, password: String) {

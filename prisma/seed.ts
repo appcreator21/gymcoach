@@ -14,7 +14,7 @@
 
 import { PrismaClient, Sex, TrainingGoal } from '@/prisma/generated/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { seedExerciseCatalog } from '../lib/exercise-catalog';
 
 // Prisma 7 requires a driver adapter to connect (the Rust engine was removed).

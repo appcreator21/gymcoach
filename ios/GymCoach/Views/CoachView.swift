@@ -118,7 +118,7 @@ struct CoachView: View {
 
     private var intro: some View {
         VStack(spacing: 14) {
-            Image(systemName: "sparkles").font(.system(size: 38)).foregroundStyle(Theme.gradient)
+            Image(systemName: "sparkles").font(.system(size: 38)).foregroundStyle(Theme.accent)
             Text("Ask Surba anything").font(.system(.title3, design: .rounded, weight: .bold))
             Text("Surba knows your program, recent sessions and progression.")
                 .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
@@ -146,7 +146,7 @@ struct CoachView: View {
             } label: {
                 Image(systemName: "arrow.up").font(.headline).foregroundStyle(.white)
                     .frame(width: 42, height: 42)
-                    .background(Theme.gradient, in: Circle())
+                    .background(Theme.accent, in: Circle())
             }
             .disabled(model.isStreaming || model.input.trimmingCharacters(in: .whitespaces).isEmpty)
         }
@@ -172,7 +172,7 @@ struct Bubble: View {
             .padding(.horizontal, 14).padding(.vertical, 10)
             .background {
                 if message.isUser {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Theme.gradient)
+                    RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Theme.accent)
                 } else {
                     RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.ultraThinMaterial)
                 }

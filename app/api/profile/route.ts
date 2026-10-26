@@ -16,6 +16,7 @@ const PROFILE_SELECT = {
   weeklyFrequency: true,
   coachNote: true,
   unit: true,
+  onboardedAt: true,
 } as const;
 
 export async function GET() {

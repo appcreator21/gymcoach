@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
 import { signSession, SESSION_COOKIE, SESSION_COOKIE_OPTIONS } from '@/lib/auth';
 import { registerSchema } from '@/lib/schemas/auth';
-import { seedExerciseCatalog } from '@/lib/exercise-catalog';
+import { EXERCISE_CATALOG } from '@/lib/exercise-catalog';
 import { rateLimit, clientIp } from '@/lib/rate-limit';
 
 // POST /api/auth/register: creates an account, seeds the default exercise
@@ -42,8 +42,12 @@ export async function POST(req: Request) {
       data: { email, passwordHash, displayName: displayName ?? null },
     });
 
-    // Give the new account a starter catalog so the app is not empty.
-    await seedExerciseCatalog(db, user.id);
+    // Give the new account a starter catalog so the app is not empty. The
+    // account is brand new, so a single bulk insert replaces 55 upserts (each
+    // a database round trip).
+    await db.exercise.createMany({
+      data: EXERCISE_CATALOG.map((exercise) => ({ ...exercise, userId: user.id })),
+    });
 
     const token = await signSession({ userId: user.id, email: user.email });
     (await cookies()).set(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS);

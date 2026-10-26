@@ -234,7 +234,7 @@ struct WorkoutSessionView: View {
                 Label(banner, systemImage: "trophy.fill")
                     .font(.system(.subheadline, design: .rounded, weight: .bold))
                     .padding(.horizontal, 16).padding(.vertical, 10)
-                    .background(Theme.gradient, in: Capsule())
+                    .background(Theme.accent, in: Capsule())
                     .shadow(radius: 12)
                     .padding(.top, 70)
                     .transition(.move(edge: .top).combined(with: .opacity))
@@ -280,7 +280,7 @@ struct WorkoutSessionView: View {
             Button { showFinish = true } label: {
                 Text("Finish").font(.system(.subheadline, design: .rounded, weight: .bold))
                     .padding(.horizontal, 16).padding(.vertical, 10)
-                    .background(Theme.gradient, in: Capsule())
+                    .background(Theme.accent, in: Capsule())
             }
             .foregroundStyle(.white)
         }

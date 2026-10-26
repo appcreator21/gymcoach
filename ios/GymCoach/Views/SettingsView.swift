@@ -10,7 +10,7 @@ struct SettingsView: View {
                 Section {
                     HStack(spacing: 14) {
                         ZStack {
-                            Circle().fill(Theme.gradient)
+                            Circle().fill(Theme.accent)
                             Text(String(app.profile?.firstName.prefix(1) ?? "G").uppercased())
                                 .font(.system(.title2, design: .rounded, weight: .heavy))
                         }
@@ -30,15 +30,17 @@ struct SettingsView: View {
                     }
                     Button("Log bodyweight") { showWeight = true }
                 }
-                Section("Server") {
-                    LabeledContent("Address", value: app.serverURL)
+                Section("Surba") {
+                    NavigationLink("What Surba knows about you") { MemoryView() }
+                }
+                Section("Data") {
                     Button("Refresh data") { Task { await app.refresh() } }
                 }
                 Section {
                     Button("Sign out", role: .destructive) { Task { await app.logout() } }
                 }
                 Section {
-                    Text("Surba Fit. Your data stays on your own server.")
+                    Text("Surba Fit. Train with Surba.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }
@@ -46,5 +48,28 @@ struct SettingsView: View {
             .navigationTitle("You")
             .sheet(isPresented: $showWeight) { LogBodyweightSheet().presentationDetents([.height(280)]) }
         }
+    }
+}
+
+struct MemoryView: View {
+    @Environment(AppState.self) private var app
+    @State private var memory: String?
+
+    var body: some View {
+        ScrollView {
+            if let memory {
+                Text(memory.isEmpty ? "Surba has not learned anything about you yet." : memory)
+                    .font(.system(.callout, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(20)
+                    .textSelection(.enabled)
+            } else {
+                ProgressView().padding(.top, 60)
+            }
+        }
+        .background(Theme.background)
+        .navigationTitle("Your memory file")
+        .navigationBarTitleDisplayMode(.inline)
+        .task { memory = await app.loadMemory() }
     }
 }

@@ -41,7 +41,7 @@ struct HomeView: View {
             GlassCard {
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: a.pinned ? "pin.fill" : "megaphone.fill")
-                        .foregroundStyle(Theme.gradient).font(.title3)
+                        .foregroundStyle(Theme.accent).font(.title3)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(a.title).font(.system(.headline, design: .rounded))
                         Text(a.body).font(.subheadline).foregroundStyle(.secondary)
@@ -100,7 +100,7 @@ struct HomeView: View {
                             Text(app.program?.name ?? "").font(.footnote).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Image(systemName: "bolt.fill").foregroundStyle(Theme.gradient).font(.title2)
+                        Image(systemName: "bolt.fill").foregroundStyle(Theme.accent).font(.title2)
                     }
                     ForEach((workout.exercises ?? []).prefix(5)) { pe in
                         HStack {
@@ -117,7 +117,7 @@ struct HomeView: View {
                         Haptics.thud()
                         activeWorkout = workout
                     }
-                    .buttonStyle(GradientButtonStyle())
+                    .buttonStyle(PrimaryButtonStyle())
                 }
             }
         } else {

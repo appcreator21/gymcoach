@@ -163,7 +163,7 @@ struct TemplateDetailView: View {
                     NavigationLink { AssignTemplateView(client: nil, template: summary) } label: {
                         Text("Assign to a client").font(.system(.headline, design: .rounded))
                             .foregroundStyle(.white).frame(maxWidth: .infinity).padding(.vertical, 15)
-                            .background(Theme.gradient, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .background(Theme.accent, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                     }
                 } else if let error {
                     Text(error).foregroundStyle(.red)

@@ -22,8 +22,7 @@ struct AdminView: View {
                         }
                         .foregroundStyle(.white)
                         .padding(18)
-                        .background(Theme.gradient, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                        .shadow(color: Theme.accent.opacity(0.4), radius: 14, y: 6)
+                        .background(Theme.accent, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                     }
                     .buttonStyle(.plain)
 
@@ -87,7 +86,7 @@ struct AdminUsersView: View {
                 NavigationLink { AdminUserDetailView(user: u) } label: {
                     HStack(spacing: 12) {
                         ZStack {
-                            Circle().fill(Theme.gradient)
+                            Circle().fill(Theme.accent)
                             Text(String(u.name.prefix(1)).uppercased()).font(.headline)
                         }
                         .frame(width: 42, height: 42)
@@ -151,7 +150,7 @@ struct AdminUserDetailView: View {
                 Button { showBuilder = true } label: {
                     Label("Build a program for \(user.name)", systemImage: "wand.and.stars")
                 }
-                .buttonStyle(GradientButtonStyle())
+                .buttonStyle(PrimaryButtonStyle())
 
                 HStack(spacing: 12) {
                     NavigationLink { AssignTemplateView(client: user) } label: {
@@ -288,7 +287,7 @@ struct ProgramBuilderView: View {
                         if generating { HStack { ProgressView().tint(.white); Text("Surba is designing...") } }
                         else { Label(preview == nil ? "Generate" : "Generate again", systemImage: "wand.and.stars") }
                     }
-                    .buttonStyle(GradientButtonStyle())
+                    .buttonStyle(PrimaryButtonStyle())
                     .disabled(generating || prompt.trimmingCharacters(in: .whitespacesAndNewlines).count < 10 || targetId.isEmpty)
 
                     if let error { Text(error).font(.footnote).foregroundStyle(.red) }
@@ -356,7 +355,7 @@ struct ProgramBuilderView: View {
             if saving { ProgressView().tint(.white) }
             else { Label(saved ? "Saved" : "Save to client", systemImage: saved ? "checkmark.circle.fill" : "tray.and.arrow.down.fill") }
         }
-        .buttonStyle(GradientButtonStyle())
+        .buttonStyle(PrimaryButtonStyle())
         .disabled(saving || saved)
         Button { Task { await saveTemplate() } } label: {
             Label(templateSaved ? "Saved as template" : "Save as reusable template", systemImage: "square.stack.3d.up")

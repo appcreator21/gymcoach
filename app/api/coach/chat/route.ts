@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { ApiError, handleApiError, parseJsonBody, requireApiUserId } from '@/lib/api';
@@ -7,6 +7,7 @@ import { getLlmProvider, LlmError } from '@/lib/llm';
 import { buildCoachPayload, buildCurrentSessionContext } from '@/lib/coach';
 import { CHAT_SYSTEM_PROMPT } from '@/lib/prompts/chat-system-prompt';
 import { deriveConversationTitle } from '@/lib/chat';
+import { reviseMemory } from '@/lib/memory';
 
 const bodySchema = z.object({
   conversationId: z.string().cuid().optional(),
@@ -74,7 +75,14 @@ export async function POST(req: Request) {
       const currentSession = await buildCurrentSessionContext(userId, sessionId);
       if (currentSession) payload.currentSession = currentSession;
     }
-    const system = `${CHAT_SYSTEM_PROMPT}\n\n# Trainee's current training data (JSON)\n${JSON.stringify(payload, null, 2)}`;
+    const owner = await db.user.findUnique({
+      where: { id: userId },
+      select: { memory: true },
+    });
+    const memorySection = owner?.memory
+      ? `\n\n# Client memory file (what you know about this person; use it to personalize, never recite it)\n${owner.memory}`
+      : '';
+    const system = `${CHAT_SYSTEM_PROMPT}${memorySection}\n\n# Trainee's current training data (JSON)\n${JSON.stringify(payload, null, 2)}`;
 
     const provider = getLlmProvider();
     const encoder = new TextEncoder();
@@ -93,8 +101,7 @@ export async function POST(req: Request) {
             controller.enqueue(encoder.encode(chunk));
           }
         } catch (err) {
-          const msg =
-            err instanceof LlmError ? err.message : 'The coach is unavailable right now.';
+          const msg = err instanceof LlmError ? err.message : 'The coach is unavailable right now.';
           controller.enqueue(encoder.encode(`\n\n[error] ${msg}`));
         } finally {
           if (assistant.trim()) {
@@ -106,6 +113,32 @@ export async function POST(req: Request) {
               .catch(() => {});
           }
           controller.close();
+          if (assistant.trim() && owner?.memory) {
+            const current = owner.memory;
+            // Runs after the response is sent, so chat latency is unaffected.
+            try {
+              after(async () => {
+                try {
+                  const next = await reviseMemory(
+                    current,
+                    message,
+                    assistant,
+                    new Date().toISOString().slice(0, 10),
+                  );
+                  if (next) {
+                    await db.user.update({
+                      where: { id: userId },
+                      data: { memory: next, memoryUpdatedAt: new Date() },
+                    });
+                  }
+                } catch {
+                  // Memory is best-effort; a failed update never affects the chat.
+                }
+              });
+            } catch {
+              // after() unavailable in this runtime: skip the memory update.
+            }
+          }
         }
       },
     });
