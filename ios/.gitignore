@@ -1,0 +1,4 @@
+GymCoach/Info.plist
+*.xcodeproj
+xcuserdata/
+DerivedData/
