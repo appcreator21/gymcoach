@@ -286,6 +286,10 @@ private struct WorkoutEditorSection: View {
     var body: some View {
         Section {
             TextField("Workout name", text: $workout.name).font(.headline)
+            Picker("Day of the week", selection: $workout.dayOfWeek) {
+                Text("Any day").tag(Int?.none)
+                ForEach(1...7, id: \.self) { Text(Weekday.name($0)).tag(Int?.some($0)) }
+            }
             ForEach($workout.exercises) { $exercise in
                 ExerciseRowEditor(exercise: $exercise)
             }
@@ -341,11 +345,19 @@ struct AssignTemplateView: View {
     @State private var templates: [TemplateSummary] = []
     @State private var clients: [AdminUser] = []
     @State private var templateId = ""
-    @State private var clientId = ""
+    @State private var selected: Set<String> = []
     @State private var activate = true
     @State private var busy = false
     @State private var done = false
     @State private var error: String?
+    @State private var failedNames: [String] = []
+
+    private struct AssignResponse: Decodable {
+        struct Failure: Decodable { let userId: String; let error: String }
+        let failed: [Failure]
+    }
+
+    private var allSelected: Bool { !clients.isEmpty && selected.count == clients.count }
 
     var body: some View {
         Form {
@@ -357,17 +369,48 @@ struct AssignTemplateView: View {
                 LabeledContent("Template", value: template?.name ?? "")
             }
             if client == nil {
-                Picker("Client", selection: $clientId) {
-                    ForEach(clients) { Text($0.name).tag($0.id) }
+                Section {
+                    ForEach(clients) { c in
+                        Button { toggle(c.id) } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(c.name)
+                                    if let program = c.activeProgram {
+                                        Text("Now: \(program)").font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                Image(systemName: selected.contains(c.id) ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(selected.contains(c.id) ? Theme.accent : Color.secondary)
+                                    .font(.title3)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } header: {
+                    HStack {
+                        Text(selected.isEmpty ? "Clients" : "\(selected.count) selected")
+                        Spacer()
+                        Button(allSelected ? "Clear" : "Select all") {
+                            Haptics.select()
+                            selected = allSelected ? [] : Set(clients.map(\.id))
+                        }
+                        .textCase(nil)
+                    }
                 }
             } else {
                 LabeledContent("Client", value: client?.name ?? "")
             }
             Toggle("Make it their active program", isOn: $activate)
             if let error { Text(error).foregroundStyle(.red).font(.footnote) }
+            if !failedNames.isEmpty {
+                Text("Not assigned: \(failedNames.joined(separator: ", "))")
+                    .foregroundStyle(.red).font(.footnote)
+            }
             Section {
-                Button(done ? "Assigned" : "Assign") { Task { await assign() } }
-                    .disabled(busy || done || templateId.isEmpty || clientId.isEmpty)
+                Button(done ? "Assigned" : buttonTitle) { Task { await assign() } }
+                    .disabled(busy || done || templateId.isEmpty || selected.isEmpty)
             }
         }
         .scrollContentBackground(.hidden)
@@ -375,27 +418,45 @@ struct AssignTemplateView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             if let template { templateId = template.id }
-            if let client { clientId = client.id }
+            if let client { selected = [client.id] }
             if template == nil {
                 templates = (try? await APIClient.shared.get("/api/admin/templates")) ?? []
                 templateId = templates.first(where: \.valid)?.id ?? ""
             }
             if client == nil {
                 clients = (try? await APIClient.shared.get("/api/admin/users")) ?? []
-                clientId = clients.first?.id ?? ""
             }
         }
     }
 
+    private var buttonTitle: String {
+        selected.count > 1 ? "Assign to \(selected.count) clients" : "Assign"
+    }
+
+    private func toggle(_ id: String) {
+        Haptics.select()
+        if selected.contains(id) { selected.remove(id) } else { selected.insert(id) }
+    }
+
     private func assign() async {
         busy = true
+        error = nil
+        failedNames = []
         defer { busy = false }
         do {
-            _ = try await APIClient.shared.raw("POST", "/api/admin/templates/\(templateId)/assign",
-                                               json: ["userId": clientId, "activate": activate])
-            done = true
-            Haptics.success()
-        } catch { self.error = error.localizedDescription }
+            let data = try await APIClient.shared.raw(
+                "POST", "/api/admin/templates/\(templateId)/assign",
+                json: ["userIds": Array(selected), "activate": activate])
+            let result = try? JSONDecoder().decode(AssignResponse.self, from: data)
+            failedNames = (result?.failed ?? []).map { f in
+                clients.first(where: { $0.id == f.userId })?.name ?? f.userId
+            }
+            done = failedNames.isEmpty
+            failedNames.isEmpty ? Haptics.success() : Haptics.warning()
+        } catch {
+            self.error = error.localizedDescription
+            Haptics.warning()
+        }
     }
 }
 
@@ -553,5 +614,123 @@ struct ExerciseEditorSheet: View {
             Haptics.success()
             dismiss()
         } catch { self.error = error.localizedDescription }
+    }
+}
+
+
+/// One program on a client: set which weekday each workout falls on, or
+/// unassign the whole program. Logged workouts are kept either way.
+struct AdminProgramView: View {
+    @Environment(\.dismiss) private var dismiss
+    let user: AdminUser
+    let programId: String
+    var onChanged: () -> Void
+
+    @State private var detail: AdminProgramDetail?
+    @State private var saving = false
+    @State private var confirmUnassign = false
+    @State private var error: String?
+    @State private var saved = false
+
+    var body: some View {
+        Form {
+            if let detail {
+                Section {
+                    ForEach(detail.workouts.indices, id: \.self) { index in
+                        Picker(detail.workouts[index].name, selection: dayBinding(index)) {
+                            Text("Any day").tag(Int?.none)
+                            ForEach(1...7, id: \.self) { Text(Weekday.name($0)).tag(Int?.some($0)) }
+                        }
+                    }
+                    Button("Spread across the week") { spread() }
+                } header: {
+                    Text("Schedule")
+                } footer: {
+                    Text("A workout with a day shows up on that day. Days with nothing scheduled are rest days. With no days set, workouts come up in order.")
+                }
+                Section {
+                    Button(saved ? "Saved" : "Save schedule") { Task { await save() } }
+                        .disabled(saving)
+                }
+                Section {
+                    Button("Unassign program", role: .destructive) {
+                        Haptics.warning()
+                        confirmUnassign = true
+                    }
+                } footer: {
+                    Text("Removes \(detail.name) from \(user.name). Their logged workouts and records are kept.")
+                }
+            } else if let error {
+                Text(error).foregroundStyle(.red)
+            } else {
+                ProgressView().frame(maxWidth: .infinity)
+            }
+            if let error, detail != nil { Text(error).font(.footnote).foregroundStyle(.red) }
+        }
+        .scrollContentBackground(.hidden)
+        .navigationTitle(detail?.name ?? "Program")
+        .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog("Unassign this program?", isPresented: $confirmUnassign, titleVisibility: .visible) {
+            Button("Unassign", role: .destructive) { Task { await unassign() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("\(user.name) will no longer see it. Their history stays.")
+        }
+        .task { await load() }
+    }
+
+    private func dayBinding(_ index: Int) -> Binding<Int?> {
+        Binding(
+            get: { detail?.workouts[index].dayOfWeek },
+            set: { detail?.workouts[index].dayOfWeek = $0; saved = false })
+    }
+
+    /// Evenly spaced weekdays: 3 workouts become Mon, Wed, Fri.
+    private func spread() {
+        guard var current = detail else { return }
+        let patterns: [Int: [Int]] = [1: [1], 2: [1, 4], 3: [1, 3, 5], 4: [1, 2, 4, 5], 5: [1, 2, 3, 4, 5], 6: [1, 2, 3, 4, 5, 6], 7: [1, 2, 3, 4, 5, 6, 7]]
+        let days = patterns[min(max(current.workouts.count, 1), 7)] ?? []
+        for index in current.workouts.indices {
+            current.workouts[index].dayOfWeek = index < days.count ? days[index] : nil
+        }
+        detail = current
+        saved = false
+        Haptics.select()
+    }
+
+    private func load() async {
+        do { detail = try await APIClient.shared.get("/api/admin/users/\(user.id)/programs/\(programId)") }
+        catch { self.error = error.localizedDescription }
+    }
+
+    private func save() async {
+        guard let detail else { return }
+        saving = true
+        error = nil
+        defer { saving = false }
+        let days: [[String: Any]] = detail.workouts.map { w in
+            ["workoutId": w.id, "dayOfWeek": w.dayOfWeek.map { $0 as Any } ?? NSNull()]
+        }
+        do {
+            _ = try await APIClient.shared.raw("PATCH", "/api/admin/users/\(user.id)/programs/\(programId)", json: ["days": days])
+            saved = true
+            Haptics.success()
+            onChanged()
+        } catch {
+            self.error = error.localizedDescription
+            Haptics.warning()
+        }
+    }
+
+    private func unassign() async {
+        do {
+            _ = try await APIClient.shared.raw("DELETE", "/api/admin/users/\(user.id)/programs/\(programId)")
+            Haptics.success()
+            onChanged()
+            dismiss()
+        } catch {
+            self.error = error.localizedDescription
+            Haptics.warning()
+        }
     }
 }

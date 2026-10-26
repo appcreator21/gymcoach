@@ -3,11 +3,15 @@ import { getLlmProvider, LlmError } from '@/lib/llm';
 import { PROGRAM_GEN_SYSTEM_PROMPT } from '@/lib/prompts/program-system-prompt';
 import {
   parseGeneratedProgram,
+  type GeneratedExercise,
   type GeneratedProgram,
   type GeneratedWorkout,
 } from '@/lib/schemas/program-generation';
 import { defaultIntraSetConfig } from '@/lib/intra-set-autoregulation';
 import type { Prisma } from '@/lib/prisma-client';
+
+// Headroom over Prisma's 5 s default for the pooled connection's round trips.
+const TRANSACTION_OPTIONS = { timeout: 20_000, maxWait: 10_000 };
 
 // Generates a structured program draft from a natural-language goal. Does not
 // persist anything: the result is previewed (and edited) before saving.
@@ -76,13 +80,9 @@ export async function buildProgramFromGenerated(
       },
     });
 
-    let workoutOrder = 1;
-    for (const w of program.workouts) {
-      await createGeneratedWorkout(tx, userId, created.id, w, workoutOrder++);
-    }
-
+    await createGeneratedWorkouts(tx, userId, created.id, program.workouts, 1);
     return created.id;
-  });
+  }, TRANSACTION_OPTIONS);
 }
 
 // Appends one generated workout to an EXISTING program the user owns, after
@@ -107,65 +107,97 @@ export async function addWorkoutToProgram(
       orderBy: { order: 'desc' },
       select: { order: true },
     });
-    return createGeneratedWorkout(tx, userId, programId, workout, (last?.order ?? 0) + 1);
-  });
+    const ids = await createGeneratedWorkouts(
+      tx,
+      userId,
+      programId,
+      [workout],
+      (last?.order ?? 0) + 1,
+    );
+    return ids[0]!;
+  }, TRANSACTION_OPTIONS);
 }
 
-// Persists one workout and its exercises inside an open transaction. New
-// exercises are created on the fly; existing ones are reused by name.
-async function createGeneratedWorkout(
+// Persists workouts and their exercises inside an open transaction using a
+// handful of bulk queries (not one per exercise): the app talks to Postgres
+// through a pooler, so every round trip costs real latency and a per-exercise
+// loop used to exceed the interactive transaction timeout. New exercises are
+// created on the fly; existing ones are reused by name. Returns the new
+// workout ids in order.
+async function createGeneratedWorkouts(
   tx: Prisma.TransactionClient,
   userId: string,
   programId: string,
-  w: GeneratedWorkout,
-  order: number,
-): Promise<string> {
-  const workout = await tx.workout.create({
-    data: {
-      programId,
-      name: w.name,
-      dayOfWeek: w.dayOfWeek ?? null,
-      order,
-    },
-  });
+  workouts: GeneratedWorkout[],
+  firstOrder: number,
+): Promise<string[]> {
+  const firstSeen = new Map<string, GeneratedExercise>();
+  for (const w of workouts) {
+    for (const ex of w.exercises) if (!firstSeen.has(ex.name)) firstSeen.set(ex.name, ex);
+  }
+  const names = [...firstSeen.keys()];
 
-  let exerciseOrder = 1;
-  for (const ex of w.exercises) {
-    const exercise = await tx.exercise.upsert({
-      where: { userId_name: { userId, name: ex.name } },
-      update: {},
-      create: {
-        userId,
-        name: ex.name,
-        muscleGroup: ex.muscleGroup,
-        // A CARDIO machine is always logged as cardio (duration/distance),
-        // whatever category the model picked.
-        category: ex.equipmentType === 'CARDIO' ? 'CARDIO' : ex.category,
-        equipmentType: ex.equipmentType ?? 'OTHER',
-        defaultRestSec: ex.restSec,
-      },
+  const known = new Map(
+    (await tx.exercise.findMany({ where: { userId, name: { in: names } } })).map((e) => [
+      e.name,
+      e,
+    ]),
+  );
+  const missing = names.filter((name) => !known.has(name));
+  if (missing.length > 0) {
+    await tx.exercise.createMany({
+      data: missing.map((name) => {
+        const ex = firstSeen.get(name)!;
+        return {
+          userId,
+          name,
+          muscleGroup: ex.muscleGroup,
+          // A CARDIO machine is always logged as cardio (duration/distance),
+          // whatever category the model picked.
+          category: ex.equipmentType === 'CARDIO' ? ('CARDIO' as const) : ex.category,
+          equipmentType: ex.equipmentType ?? 'OTHER',
+          defaultRestSec: ex.restSec,
+        };
+      }),
+      skipDuplicates: true,
     });
+    for (const e of await tx.exercise.findMany({ where: { userId, name: { in: missing } } })) {
+      known.set(e.name, e);
+    }
+  }
 
-    const autoregDefaults = defaultIntraSetConfig(exercise);
-    await tx.programExercise.create({
-      data: {
-        workoutId: workout.id,
+  const workoutRows = workouts.map((w, index) => ({
+    id: crypto.randomUUID(),
+    programId,
+    name: w.name,
+    dayOfWeek: w.dayOfWeek ?? null,
+    order: firstOrder + index,
+  }));
+  await tx.workout.createMany({ data: workoutRows });
+
+  const programExercises = workouts.flatMap((w, workoutIndex) =>
+    w.exercises.map((ex, exerciseIndex) => {
+      const exercise = known.get(ex.name)!;
+      const autoregDefaults = defaultIntraSetConfig(exercise);
+      return {
+        workoutId: workoutRows[workoutIndex]!.id,
         exerciseId: exercise.id,
-        order: exerciseOrder++,
+        order: exerciseIndex + 1,
         targetSets: ex.targetSets,
         targetRepsMin: ex.targetRepsMin,
         targetRepsMax: Math.max(ex.targetRepsMax, ex.targetRepsMin),
         targetRIR: ex.targetRIR,
         restSec: ex.restSec,
-        autoregulationMode: ex.autoregulationMode ?? 'PRESERVE_RIR',
+        autoregulationMode: ex.autoregulationMode ?? ('PRESERVE_RIR' as const),
         fatigueRate: ex.fatigueRate ?? autoregDefaults.fatigueRate,
         loadAdjustmentPct: ex.loadAdjustmentPct ?? autoregDefaults.loadAdjustmentPct,
         tempo: ex.tempo ?? null,
         notes: ex.notes ?? null,
         supersetGroup: ex.supersetGroup ?? null,
-      },
-    });
-  }
+      };
+    }),
+  );
+  await tx.programExercise.createMany({ data: programExercises });
 
-  return workout.id;
+  return workoutRows.map((row) => row.id);
 }

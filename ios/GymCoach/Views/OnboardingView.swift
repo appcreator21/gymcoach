@@ -552,18 +552,25 @@ private struct BodyForm: View {
                 }
             }
             DetentSlider(title: "Age", value: $a.age, range: 13...80, step: 1, display: "\(Int(a.age))", unit: "years")
-            DetentSlider(title: "Height", value: $a.heightCm, range: 140...215, step: 1, display: "\(Int(a.heightCm))", unit: "cm")
             VStack(alignment: .leading, spacing: 10) {
                 Picker("Unit", selection: Binding(get: { a.isPounds }, set: { toPounds in
                     guard toPounds != a.isPounds else { return }
                     a.weight = toPounds ? (a.weight * 2.20462).rounded() : (a.weight / 2.20462).rounded()
                     a.isPounds = toPounds
                 })) {
-                    Text("kg").tag(false)
-                    Text("lb").tag(true)
+                    Text("Metric  (kg, cm)").tag(false)
+                    Text("Imperial  (lb, in)").tag(true)
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: a.isPounds) { _, _ in Haptics.select() }
+                if a.isPounds {
+                    DetentSlider(title: "Height",
+                                 value: Binding(get: { (a.heightCm / 2.54).rounded() }, set: { a.heightCm = $0 * 2.54 }),
+                                 range: 55...85, step: 1,
+                                 display: "\(Int((a.heightCm / 2.54).rounded()) / 12)'\(Int((a.heightCm / 2.54).rounded()) % 12)\"", unit: "")
+                } else {
+                    DetentSlider(title: "Height", value: $a.heightCm, range: 140...215, step: 1, display: "\(Int(a.heightCm))", unit: "cm")
+                }
                 DetentSlider(title: "Weight", value: $a.weight,
                              range: a.isPounds ? 90...350 : 40...160, step: 1,
                              display: "\(Int(a.weight))", unit: a.isPounds ? "lb" : "kg")

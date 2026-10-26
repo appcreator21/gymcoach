@@ -50,6 +50,8 @@ struct MainTabs: View {
             CoachView().tabItem { Label("Surba", systemImage: "sparkles") }.tag(3)
             SettingsView().tabItem { Label("You", systemImage: "person.crop.circle") }.tag(4)
         }
+        // Lets every scroll view in the tabs scroll a little past the tab bar.
+        .contentMargins(.bottom, 56, for: .scrollContent)
         .toolbarBackground(Theme.background, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
         .onChange(of: tab) { _, _ in Haptics.select() }

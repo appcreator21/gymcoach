@@ -3,6 +3,7 @@ import SwiftUI
 struct HomeView: View {
     @Environment(AppState.self) private var app
     @State private var activeWorkout: Workout?
+    @State private var showNext = false
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -25,7 +26,10 @@ struct HomeView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 30)
             }
-            .refreshable { await app.refresh() }
+            .refreshable {
+                Haptics.soft()
+                await app.refresh()
+            }
             .navigationTitle(greeting)
             .scrollContentBackground(.hidden)
             .overlay {
@@ -91,44 +95,115 @@ struct HomeView: View {
 
     @ViewBuilder
     private var upNext: some View {
-        SectionTitle("Up next")
-        if let workout = app.nextWorkout {
-            let resuming = app.inProgressSession(for: workout.id) != nil
-            GlassCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(workout.name).font(.system(.title2, design: .rounded, weight: .bold))
-                            Text(app.program?.name ?? "").font(.footnote).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Image(systemName: "bolt.fill").foregroundStyle(Theme.accent).font(.title2)
-                    }
-                    ForEach((workout.exercises ?? []).prefix(5)) { pe in
-                        HStack {
-                            Circle().fill(Theme.accent.opacity(0.7)).frame(width: 6, height: 6)
-                            Text(pe.exercise.name).font(.subheadline)
-                            Spacer()
-                            Text("\(pe.targetSets) x \(pe.repRange)").font(.footnote.monospacedDigit()).foregroundStyle(.secondary)
-                        }
-                    }
-                    if (workout.exercises ?? []).count > 5 {
-                        Text("+\((workout.exercises ?? []).count - 5) more").font(.footnote).foregroundStyle(.secondary)
-                    }
-                    Button(resuming ? "Resume workout" : "Start workout") {
-                        Haptics.thud()
-                        activeWorkout = workout
-                    }
-                    .buttonStyle(PrimaryButtonStyle())
-                }
+        switch app.todayPlan {
+        case .workout(let workout, let caption):
+            SectionTitle(caption)
+            workoutCard(workout)
+        case .done(let finished):
+            SectionTitle("Today")
+            doneCard(finished)
+            if showNext, let next = app.peekWorkout {
+                SectionTitle(nextTitle(for: next))
+                workoutCard(next)
             }
-        } else {
+        case .rest(let next):
+            SectionTitle("Today")
+            restCard(next)
+            if showNext, let next {
+                SectionTitle(nextTitle(for: next))
+                workoutCard(next)
+            }
+        case .empty:
+            SectionTitle("Today")
             GlassCard {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("No active program").font(.headline)
-                    Text(app.loadError ?? "Create or activate a program on the Surba Fit website, or ask Surba to build one.")
+                    Text(app.loadError ?? "Your coach has not assigned a program yet. Ask Surba to build one.")
                         .font(.subheadline).foregroundStyle(.secondary)
                 }
+            }
+        }
+    }
+
+    private func nextTitle(for workout: Workout) -> String {
+        if let day = workout.dayOfWeek { return "Next: \(Weekday.name(day))" }
+        return "Next workout"
+    }
+
+    private func doneCard(_ finished: SessionSummary) -> some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    Image(systemName: "checkmark.seal.fill").font(.title).foregroundStyle(Theme.mint)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Today's workout is done").font(.system(.title3, design: .rounded, weight: .bold))
+                        Text("\(finished.title)  -  \(finished.setCount) sets" + (finished.duration.map { "  -  \(formatDuration($0))" } ?? ""))
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+                Text("Rest up. Your next workout unlocks tomorrow.").font(.subheadline).foregroundStyle(.secondary)
+                Button(showNext ? "Hide next workout" : "Look at the next workout") {
+                    Haptics.select()
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { showNext.toggle() }
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Theme.accent)
+            }
+        }
+    }
+
+    private func restCard(_ next: Workout?) -> some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    Image(systemName: "moon.zzz.fill").font(.title).foregroundStyle(Theme.accent2)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Rest day").font(.system(.title3, design: .rounded, weight: .bold))
+                        if let next, let day = next.dayOfWeek {
+                            Text("Next: \(next.name) on \(Weekday.name(day))").font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                if next != nil {
+                    Button(showNext ? "Hide workout" : "Train anyway") {
+                        Haptics.select()
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { showNext.toggle() }
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Theme.accent)
+                }
+            }
+        }
+    }
+
+    private func workoutCard(_ workout: Workout) -> some View {
+        let resuming = app.inProgressSession(for: workout.id) != nil
+        return GlassCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(workout.name).font(.system(.title2, design: .rounded, weight: .bold))
+                        Text(app.program?.name ?? "").font(.footnote).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "bolt.fill").foregroundStyle(Theme.accent).font(.title2)
+                }
+                ForEach((workout.exercises ?? []).prefix(5)) { pe in
+                    HStack {
+                        Circle().fill(Theme.accent.opacity(0.7)).frame(width: 6, height: 6)
+                        Text(pe.exercise.name).font(.subheadline)
+                        Spacer()
+                        Text("\(pe.targetSets) x \(pe.repRange)").font(.footnote.monospacedDigit()).foregroundStyle(.secondary)
+                    }
+                }
+                if (workout.exercises ?? []).count > 5 {
+                    Text("+\((workout.exercises ?? []).count - 5) more").font(.footnote).foregroundStyle(.secondary)
+                }
+                Button(resuming ? "Resume workout" : "Start workout") {
+                    Haptics.thud()
+                    activeWorkout = workout
+                }
+                .buttonStyle(PrimaryButtonStyle())
             }
         }
     }
@@ -145,6 +220,7 @@ struct HomeView: View {
                         SessionRow(summary: s)
                     }
                     .buttonStyle(.plain)
+                    .hapticTap()
                 }
             }
         }

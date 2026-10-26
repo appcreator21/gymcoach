@@ -147,15 +147,18 @@ final class AppState {
         let wanted = sessions.filter { $0.finishedAt != nil && details[$0.id] == nil }.prefix(30).map(\.id)
         guard !wanted.isEmpty else { return }
         let client = api
-        let fetched = await withTaskGroup(of: SessionDetail?.self) { group -> [SessionDetail] in
-            for id in wanted {
-                group.addTask { try? await client.get("/api/sessions/\(id)") }
+        // A few at a time: the server handles bursts of parallel requests badly.
+        for chunk in stride(from: 0, to: wanted.count, by: 4).map({ Array(wanted[$0..<min($0 + 4, wanted.count)]) }) {
+            let fetched = await withTaskGroup(of: SessionDetail?.self) { group -> [SessionDetail] in
+                for id in chunk {
+                    group.addTask { try? await client.get("/api/sessions/\(id)") }
+                }
+                var out: [SessionDetail] = []
+                for await item in group { if let item { out.append(item) } }
+                return out
             }
-            var out: [SessionDetail] = []
-            for await item in group { if let item { out.append(item) } }
-            return out
+            for d in fetched { details[d.id] = d }
         }
-        for d in fetched { details[d.id] = d }
     }
 
     var visibleAnnouncements: [Announcement] {
@@ -209,6 +212,61 @@ final class AppState {
         }
         return workouts.first
     }
+
+    // MARK: Today
+
+    enum TodayPlan {
+        /// A workout to do now. The string is the section title.
+        case workout(Workout, String)
+        /// Today's workout is finished.
+        case done(SessionSummary)
+        /// A scheduled program with nothing on today. Carries the next workout.
+        case rest(Workout?)
+        case empty
+    }
+
+    private var programWorkouts: [Workout] {
+        (program?.workouts ?? []).sorted { $0.order < $1.order }
+    }
+
+    /// True when the coach gave workouts specific weekdays.
+    var isScheduled: Bool { programWorkouts.contains { $0.dayOfWeek != nil } }
+
+    var sessionFinishedToday: SessionSummary? {
+        finishedSessions.first { Calendar.current.isDateInToday($0.startedAt) }
+    }
+
+    /// The next scheduled workout after today (wraps around the week).
+    var nextScheduledWorkout: Workout? {
+        let today = Weekday.iso(of: Date())
+        return programWorkouts
+            .filter { $0.dayOfWeek != nil }
+            .min { a, b in
+                func gap(_ d: Int?) -> Int { let g = ((d ?? 0) - today + 7) % 7; return g == 0 ? 7 : g }
+                return gap(a.dayOfWeek) < gap(b.dayOfWeek)
+            }
+    }
+
+    /// What the Today tab should show.
+    var todayPlan: TodayPlan {
+        let workouts = programWorkouts
+        guard !workouts.isEmpty else { return .empty }
+        if let open = sessions.first(where: { s in s.finishedAt == nil && workouts.contains { $0.id == s.workoutId } }),
+           let w = workouts.first(where: { $0.id == open.workoutId }) {
+            return .workout(w, "In progress")
+        }
+        if let done = sessionFinishedToday { return .done(done) }
+        if isScheduled {
+            let today = Weekday.iso(of: Date())
+            if let w = workouts.first(where: { $0.dayOfWeek == today }) { return .workout(w, "Today") }
+            return .rest(nextScheduledWorkout)
+        }
+        if let w = nextWorkout { return .workout(w, "Up next") }
+        return .empty
+    }
+
+    /// The workout after today's, shown only when the user asks to look ahead.
+    var peekWorkout: Workout? { isScheduled ? nextScheduledWorkout : nextWorkout }
 
     func inProgressSession(for workoutId: String) -> SessionSummary? {
         sessions.first { $0.workoutId == workoutId && $0.finishedAt == nil }

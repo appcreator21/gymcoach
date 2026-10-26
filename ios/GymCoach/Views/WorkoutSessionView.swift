@@ -359,10 +359,15 @@ struct ExerciseCard: View {
                 if let notes = pe.notes, !notes.isEmpty {
                     Text(notes).font(.caption).foregroundStyle(.secondary)
                 }
+                if !isCardio {
+                    Label(pe.exercise.weightHint, systemImage: "info.circle")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .labelStyle(HintLabelStyle())
+                }
 
                 HStack {
                     Text("SET").frame(width: 34, alignment: .leading)
-                    Text(isCardio ? "" : app.units.label.uppercased()).frame(maxWidth: .infinity)
+                    Text(isCardio ? "" : "\(pe.exercise.weightColumnTitle) (\(app.units.label.uppercased()))").frame(maxWidth: .infinity)
                     Text(isCardio ? "MINUTES" : "REPS").frame(maxWidth: .infinity)
                     Spacer().frame(width: 44)
                 }
@@ -567,6 +572,16 @@ struct PlateCalculatorView: View {
             .background(AppBackground())
             .navigationTitle("Plate calculator")
             .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+}
+
+/// Icon at the top-left of a wrapping line of text.
+struct HintLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            configuration.icon
+            configuration.title.fixedSize(horizontal: false, vertical: true)
         }
     }
 }

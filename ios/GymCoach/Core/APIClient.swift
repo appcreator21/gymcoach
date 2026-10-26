@@ -80,7 +80,7 @@ final class APIClient {
     }
 
     @discardableResult
-    func raw(_ method: String, _ path: String, json: [String: Any]? = nil, retry: Bool = true) async throws -> Data {
+    func raw(_ method: String, _ path: String, json: [String: Any]? = nil, retry: Bool = true, attempt: Int = 0) async throws -> Data {
         let request = try makeRequest(method, path, json: json)
         let data: Data
         let response: URLResponse
@@ -92,9 +92,15 @@ final class APIClient {
         guard let http = response as? HTTPURLResponse else { throw APIError.network("No response.") }
         if http.statusCode == 401 {
             if retry, let reauthenticate, await reauthenticate() {
-                return try await raw(method, path, json: json, retry: false)
+                return try await raw(method, path, json: json, retry: false, attempt: attempt)
             }
             throw APIError.unauthorized
+        }
+        // The hosted backend can shed load (502/503/504) when many requests land
+        // at once. Reads are safe to repeat, so back off and try again.
+        if [502, 503, 504].contains(http.statusCode), method == "GET", attempt < 3 {
+            try? await Task.sleep(for: .milliseconds(350 * (attempt + 1) * (attempt + 1)))
+            return try await raw(method, path, json: json, retry: retry, attempt: attempt + 1)
         }
         guard (200..<300).contains(http.statusCode) else {
             throw APIError.server(errorMessage(from: data, status: http.statusCode))

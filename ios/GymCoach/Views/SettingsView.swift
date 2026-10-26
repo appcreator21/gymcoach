@@ -6,6 +6,7 @@ struct SettingsView: View {
     @AppStorage(Prefs.keepAwake) private var keepAwake = true
     @AppStorage(Prefs.autoRest) private var autoRest = true
     @AppStorage(Prefs.healthSync) private var healthSync = false
+    @AppStorage(Prefs.haptics) private var haptics = true
     @State private var healthMessage: String?
 
     var body: some View {
@@ -26,17 +27,30 @@ struct SettingsView: View {
                     }
                 }
                 Section("Preferences") {
-                    Picker("Units", selection: Binding(
+                    Picker("Unit system", selection: Binding(
                         get: { app.units.isPounds },
-                        set: { v in Task { await app.updateUnit(pounds: v) } })) {
-                        Text("Kilograms").tag(false)
-                        Text("Pounds").tag(true)
+                        set: { v in
+                            Haptics.select()
+                            Task { await app.updateUnit(pounds: v) }
+                        })) {
+                        Text("Metric (kg, cm)").tag(false)
+                        Text("Imperial (lb, in)").tag(true)
                     }
                     Button("Log bodyweight") { showWeight = true }
                 }
                 Section("Workouts") {
                     Toggle("Keep screen awake", isOn: $keepAwake)
                     Toggle("Start rest timer after each set", isOn: $autoRest)
+                }
+                Section {
+                    Toggle("Haptics", isOn: $haptics)
+                    if haptics {
+                        Button("Try a haptic") { Haptics.success() }
+                    }
+                } header: {
+                    Text("Feedback")
+                } footer: {
+                    Text("If you feel nothing, check Settings > Sounds & Haptics > System Haptics on your iPhone.")
                 }
                 Section("Apple Health") {
                     Toggle("Save workouts to Health", isOn: Binding(
@@ -66,10 +80,10 @@ struct SettingsView: View {
                     if let healthMessage { Text(healthMessage).font(.footnote).foregroundStyle(.secondary) }
                 }
                 Section("Progress") {
-                    NavigationLink("Achievements") { AchievementsView() }
-                    NavigationLink("Personal records") { RecordsView() }
-                    NavigationLink("Lift goals") { GoalsView() }
-                    NavigationLink("Measurements") { MeasurementsView() }
+                    NavigationLink("Achievements") { AchievementsView() }.hapticTap()
+                    NavigationLink("Personal records") { RecordsView() }.hapticTap()
+                    NavigationLink("Lift goals") { GoalsView() }.hapticTap()
+                    NavigationLink("Measurements") { MeasurementsView() }.hapticTap()
                 }
                 if app.profile?.isAdmin == true {
                     Section("Admin") {
@@ -95,6 +109,10 @@ struct SettingsView: View {
                 }
             }
             .scrollContentBackground(.hidden)
+            .onChange(of: keepAwake) { _, _ in Haptics.select() }
+            .onChange(of: autoRest) { _, _ in Haptics.select() }
+            .onChange(of: healthSync) { _, _ in Haptics.select() }
+            .onChange(of: haptics) { _, on in if on { Haptics.success() } }
             .navigationTitle("You")
             .sheet(isPresented: $showWeight) { LogBodyweightSheet().presentationDetents([.height(280)]) }
         }

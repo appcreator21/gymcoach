@@ -101,3 +101,11 @@ func formatDuration(_ seconds: TimeInterval) -> String {
     let h = total / 3600, m = (total % 3600) / 60
     return h > 0 ? "\(h)h \(m)m" : "\(m) min"
 }
+
+extension View {
+    /// A light detent click when the view is tapped, alongside its own action.
+    /// For NavigationLinks and rows that have no button of their own.
+    func hapticTap() -> some View {
+        simultaneousGesture(TapGesture().onEnded { Haptics.select() })
+    }
+}

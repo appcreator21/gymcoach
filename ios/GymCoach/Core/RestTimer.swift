@@ -22,6 +22,7 @@ final class RestTimer {
     func start(seconds: Int) {
         stop()
         guard seconds > 0 else { return }
+        Haptics.soft()
         total = TimeInterval(seconds)
         endDate = Date().addingTimeInterval(total)
         remaining = total
@@ -42,6 +43,7 @@ final class RestTimer {
 
     func adjust(by seconds: Int) {
         guard let end = endDate else { return }
+        Haptics.tap()
         total = max(1, total + TimeInterval(seconds))
         endDate = end.addingTimeInterval(TimeInterval(seconds))
         tick()

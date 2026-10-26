@@ -10,6 +10,25 @@ struct Exercise: Codable, Identifiable, Hashable {
     let equipmentType: String
 
     var isCardio: Bool { category == "CARDIO" }
+
+    /// Header for the weight column when logging.
+    var weightColumnTitle: String {
+        usesBodyweight || equipmentType == "BODYWEIGHT" ? "ADDED" : "WEIGHT"
+    }
+
+    /// One line that says what number to enter as the weight.
+    var weightHint: String {
+        if usesBodyweight || equipmentType == "BODYWEIGHT" {
+            return "Enter only the EXTRA weight you add (belt, vest, dumbbell). Leave 0 for just your bodyweight."
+        }
+        switch equipmentType {
+        case "BARBELL": return "Enter the TOTAL weight on the bar: the plates plus the bar itself. Not your bodyweight."
+        case "DUMBBELL": return "Enter the weight of ONE dumbbell, not the pair. Not your bodyweight."
+        case "MACHINE": return "Enter the weight set on the machine (stack or plates). Not your bodyweight."
+        case "CABLE": return "Enter the weight set on the cable stack. Not your bodyweight."
+        default: return "Enter the weight you lifted. Not your bodyweight."
+        }
+    }
     var muscleLabel: String { Exercise.pretty(muscleGroup) }
 
     static func pretty(_ raw: String) -> String {
@@ -48,6 +67,14 @@ struct Program: Codable, Identifiable, Hashable {
     let description: String?
     let isActive: Bool
     let workouts: [Workout]?
+}
+
+/// Weekdays are stored as 1 = Monday ... 7 = Sunday.
+enum Weekday {
+    static let full = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    static func name(_ iso: Int) -> String { full[((iso - 1) % 7 + 7) % 7] }
+    static func short(_ iso: Int) -> String { String(name(iso).prefix(3)) }
+    static func iso(of date: Date) -> Int { (Calendar.current.component(.weekday, from: date) + 5) % 7 + 1 }
 }
 
 struct NamedRef: Codable, Hashable { let name: String }
@@ -295,4 +322,21 @@ enum ExerciseOptions {
                           "GLUTES", "CALVES", "ABS", "LOWER_BACK", "OTHER"]
     static let categories = ["COMPOUND", "ISOLATION", "CARDIO"]
     static let equipment = ["BARBELL", "DUMBBELL", "MACHINE", "CABLE", "BODYWEIGHT", "CARDIO", "OTHER"]
+}
+
+struct AdminProgramWorkout: Codable, Identifiable, Hashable {
+    struct Count: Codable, Hashable { let exercises: Int }
+    let id: String
+    let name: String
+    var dayOfWeek: Int?
+    let order: Int
+    let _count: Count?
+}
+
+struct AdminProgramDetail: Codable {
+    let id: String
+    let name: String
+    let phase: String
+    let isActive: Bool
+    var workouts: [AdminProgramWorkout]
 }

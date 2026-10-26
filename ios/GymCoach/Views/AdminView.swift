@@ -77,6 +77,7 @@ struct AdminView: View {
             }
         }
         .buttonStyle(.plain)
+        .hapticTap()
     }
 
     private func load() async {
@@ -181,17 +182,25 @@ struct AdminUserDetailView: View {
                 if let detail {
                     SectionTitle("Programs")
                     ForEach(detail.programs) { p in
-                        GlassCard(padding: 14) {
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text(p.name).font(.headline)
-                                    Text(p.phase).font(.caption).foregroundStyle(.secondary)
+                        NavigationLink {
+                            AdminProgramView(user: user, programId: p.id) { Task { await load() } }
+                        } label: {
+                            GlassCard(padding: 14) {
+                                HStack {
+                                    VStack(alignment: .leading) {
+                                        Text(p.name).font(.headline)
+                                        Text(p.phase).font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    if p.isActive { Text("Active").font(.caption.weight(.bold)).foregroundStyle(Theme.mint) }
+                                    Image(systemName: "chevron.right").font(.footnote).foregroundStyle(.tertiary)
                                 }
-                                Spacer()
-                                if p.isActive { Text("Active").font(.caption.weight(.bold)).foregroundStyle(Theme.mint) }
                             }
                         }
+                        .buttonStyle(.plain)
+                        .hapticTap()
                     }
+                    if detail.programs.isEmpty { Text("No program assigned.").foregroundStyle(.secondary) }
                     SectionTitle("Recent workouts")
                     ForEach(detail.sessions) { s in
                         GlassCard(padding: 14) {
