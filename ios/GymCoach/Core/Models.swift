@@ -218,3 +218,54 @@ struct DraftProgram: Codable {
     let phase: String
     let workouts: [DraftWorkout]
 }
+
+struct Announcement: Codable, Identifiable, Hashable {
+    let id: String
+    let title: String
+    let body: String
+    let pinned: Bool
+    let createdAt: Date
+}
+
+struct TemplateSummary: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let description: String?
+    let phase: String
+    let createdAt: Date
+    let workoutCount: Int
+    let exerciseCount: Int
+    let valid: Bool
+}
+
+struct TemplateDetail: Codable {
+    let id: String
+    let program: DraftProgram
+}
+
+struct AdminExercise: Codable, Identifiable, Hashable {
+    let id: String
+    var name: String
+    var muscleGroup: String
+    var category: String
+    var defaultRestSec: Int
+    var notes: String?
+    var usesBodyweight: Bool
+    var equipmentType: String
+    let _count: ExerciseUsage?
+
+    var usageCount: Int { (_count?.programExercises ?? 0) + (_count?.sets ?? 0) }
+}
+
+struct ExerciseUsage: Codable, Hashable {
+    let programExercises: Int
+    let sets: Int
+}
+
+enum ExerciseOptions {
+    static let muscles = ["CHEST", "BACK_WIDTH", "BACK_THICKNESS", "SHOULDERS_FRONT", "SHOULDERS_LATERAL",
+                          "SHOULDERS_REAR", "BICEPS", "TRICEPS", "FOREARMS", "QUADS", "HAMSTRINGS",
+                          "GLUTES", "CALVES", "ABS", "LOWER_BACK", "OTHER"]
+    static let categories = ["COMPOUND", "ISOLATION", "CARDIO"]
+    static let equipment = ["BARBELL", "DUMBBELL", "MACHINE", "CABLE", "BODYWEIGHT", "CARDIO", "OTHER"]
+}

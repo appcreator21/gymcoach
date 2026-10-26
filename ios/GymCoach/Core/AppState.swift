@@ -16,6 +16,8 @@ final class AppState {
     var sessions: [SessionSummary] = []
     var details: [String: SessionDetail] = [:]
     var bodyweight: [BodyweightEntry] = []
+    var announcements: [Announcement] = []
+    var dismissedAnnouncements: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "dismissedAnnouncements") ?? [])
     var isLoading = false
     var loadError: String?
 
@@ -118,6 +120,7 @@ final class AppState {
             } else {
                 program = nil
             }
+            announcements = (try? await api.get("/api/announcements")) ?? []
             await loadDetails()
         } catch {
             loadError = error.localizedDescription
@@ -139,6 +142,15 @@ final class AppState {
             return out
         }
         for d in fetched { details[d.id] = d }
+    }
+
+    var visibleAnnouncements: [Announcement] {
+        announcements.filter { !dismissedAnnouncements.contains($0.id) }
+    }
+
+    func dismiss(_ announcement: Announcement) {
+        dismissedAnnouncements.insert(announcement.id)
+        UserDefaults.standard.set(Array(dismissedAnnouncements), forKey: "dismissedAnnouncements")
     }
 
     // MARK: Derived stats

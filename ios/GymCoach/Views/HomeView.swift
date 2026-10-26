@@ -14,6 +14,7 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    announcementCards
                     weekCard
                     tiles
                     upNext
@@ -31,6 +32,26 @@ struct HomeView: View {
         }
         .fullScreenCover(item: $activeWorkout) { workout in
             WorkoutSessionView(workout: workout)
+        }
+    }
+
+    @ViewBuilder
+    private var announcementCards: some View {
+        ForEach(app.visibleAnnouncements.prefix(2)) { a in
+            GlassCard {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: a.pinned ? "pin.fill" : "megaphone.fill")
+                        .foregroundStyle(Theme.gradient).font(.title3)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(a.title).font(.system(.headline, design: .rounded))
+                        Text(a.body).font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Button { withAnimation { app.dismiss(a) } } label: {
+                        Image(systemName: "xmark").font(.caption.weight(.bold)).foregroundStyle(.secondary)
+                    }
+                }
+            }
         }
     }
 

@@ -16,13 +16,17 @@ your programs, history, bodyweight and AI coach are all shared with the web app.
 - Surba: streaming AI chat, with the conversation kept between launches.
 - Admin tab (admins only): dashboard, client list and detail, role changes,
   and "Create a workout with Surba": describe a goal, review the generated
-  program, save it to a client and optionally make it their active program.
+  program, save it to a client and optionally make it their active program,
+  or save it as a reusable template.
+- Admin extras: templates (preview, assign to any client), announcements
+  (shown on every user's Today screen, dismissible), and an exercise library
+  editor for any client or yourself.
 - Units (kg or lb), bodyweight logging, silent re-login via the Keychain.
 
 ## Admin access
 
 Set `ADMIN_EMAILS=you@example.com` in the server environment (comma separated),
-restart, and apply the new migration (`npx prisma migrate deploy`). That account
+restart, and apply the new migration (`npx prisma migrate deploy`, new migrations). That account
 gets the Admin tab. Admins can promote other accounts from a client's page.
 Every `/api/admin` route is checked on the server; hiding the tab is only cosmetic.
 

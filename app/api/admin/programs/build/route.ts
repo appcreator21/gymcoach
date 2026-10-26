@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { ApiError, handleApiError, parseJsonBody } from '@/lib/api';
 import { requireAdminUserId } from '@/lib/admin';
-import { buildProgramFromGenerated } from '@/lib/program-generation';
+import { saveProgramForUser } from '@/lib/admin-programs';
 import { generatedProgramSchema } from '@/lib/schemas/program-generation';
 
 const bodySchema = z.object({
@@ -22,16 +22,7 @@ export async function POST(req: Request) {
     const target = await db.user.findUnique({ where: { id: userId }, select: { id: true } });
     if (!target) throw new ApiError(404, 'User not found.');
 
-    const id = await buildProgramFromGenerated(userId, program);
-    if (activate) {
-      await db.$transaction([
-        db.program.updateMany({
-          where: { userId, isActive: true, id: { not: id } },
-          data: { isActive: false },
-        }),
-        db.program.update({ where: { id }, data: { isActive: true } }),
-      ]);
-    }
+    const id = await saveProgramForUser(userId, program, activate);
     return NextResponse.json({ id }, { status: 201 });
   } catch (err) {
     return handleApiError(err);

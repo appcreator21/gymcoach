@@ -573,3 +573,31 @@ model ReadinessCheckin {
 
   @@index([userId, createdAt])
 }
+
+// Notice from the admin shown on every user's home screen.
+model Announcement {
+  id        String   @id @default(cuid())
+  title     String
+  body      String   @db.Text
+  pinned    Boolean  @default(false)
+  authorId  String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// Reusable program saved by an admin (typically drafted with the AI). The
+// data column holds a GeneratedProgram (lib/schemas/program-generation.ts) and
+// is validated again when it is assigned to a client. createdById is a plain
+// scalar on purpose so templates outlive the admin account.
+model ProgramTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  phase       String
+  data        Json
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}

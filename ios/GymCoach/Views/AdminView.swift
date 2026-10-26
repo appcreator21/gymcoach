@@ -40,16 +40,10 @@ struct AdminView: View {
                         ProgressView().frame(maxWidth: .infinity)
                     }
 
-                    NavigationLink { AdminUsersView() } label: {
-                        GlassCard {
-                            HStack {
-                                Label("Clients", systemImage: "person.3.fill").font(.system(.headline, design: .rounded))
-                                Spacer()
-                                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
+                    adminLink("Clients", icon: "person.3.fill") { AdminUsersView() }
+                    adminLink("Templates", icon: "square.stack.3d.up.fill") { AdminTemplatesView() }
+                    adminLink("Announcements", icon: "megaphone.fill") { AdminAnnouncementsView() }
+                    adminLink("My exercise library", icon: "dumbbell.fill") { ExerciseLibraryView(userId: nil, title: "My exercises") }
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 30)
@@ -59,6 +53,19 @@ struct AdminView: View {
             .task { await load() }
             .sheet(isPresented: $showBuilder) { ProgramBuilderView(client: nil) }
         }
+    }
+
+    private func adminLink<D: View>(_ title: String, icon: String, @ViewBuilder destination: () -> D) -> some View {
+        NavigationLink { destination() } label: {
+            GlassCard {
+                HStack {
+                    Label(title, systemImage: icon).font(.system(.headline, design: .rounded))
+                    Spacer()
+                    Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     private func load() async {
@@ -146,6 +153,20 @@ struct AdminUserDetailView: View {
                 }
                 .buttonStyle(GradientButtonStyle())
 
+                HStack(spacing: 12) {
+                    NavigationLink { AssignTemplateView(client: user) } label: {
+                        Label("Assign template", systemImage: "square.stack.3d.up")
+                            .font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                    NavigationLink { ExerciseLibraryView(userId: user.id, title: "\(user.name)'s exercises") } label: {
+                        Label("Exercises", systemImage: "dumbbell")
+                            .font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                }
+                .buttonStyle(.plain)
+
                 if let detail {
                     SectionTitle("Programs")
                     ForEach(detail.programs) { p in
@@ -225,6 +246,7 @@ struct ProgramBuilderView: View {
     @State private var generating = false
     @State private var saving = false
     @State private var saved = false
+    @State private var templateSaved = false
     @State private var error: String?
 
     private let ideas = [
@@ -336,6 +358,24 @@ struct ProgramBuilderView: View {
         }
         .buttonStyle(GradientButtonStyle())
         .disabled(saving || saved)
+        Button { Task { await saveTemplate() } } label: {
+            Label(templateSaved ? "Saved as template" : "Save as reusable template", systemImage: "square.stack.3d.up")
+                .font(.subheadline.weight(.semibold)).frame(maxWidth: .infinity).padding(.vertical, 12)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(templateSaved)
+    }
+
+    private func saveTemplate() async {
+        guard var program = rawProgram else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { program["name"] = trimmed }
+        do {
+            _ = try await APIClient.shared.raw("POST", "/api/admin/templates", json: ["program": program])
+            templateSaved = true
+            Haptics.success()
+        } catch { self.error = error.localizedDescription }
     }
 
     private func loadClients() async {
@@ -349,6 +389,7 @@ struct ProgramBuilderView: View {
         generating = true
         error = nil
         saved = false
+        templateSaved = false
         defer { generating = false }
         do {
             let data = try await APIClient.shared.raw(
