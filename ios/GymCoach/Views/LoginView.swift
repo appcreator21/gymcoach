@@ -19,6 +19,7 @@ struct LoginView: View {
                 Image("LogoMark")
                     .resizable().scaledToFit()
                     .frame(height: 64)
+                    .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
                     .padding(.top, 72)
                     .modifier(Rise(appeared: appeared, delay: 0))
 

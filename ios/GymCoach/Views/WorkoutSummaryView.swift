@@ -66,6 +66,7 @@ struct WorkoutShareCard: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
                 Image("LogoMark").resizable().scaledToFit().frame(height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 Text("Surba Fit").font(.system(.title3, design: .rounded, weight: .heavy))
                 Spacer()
             }

@@ -325,6 +325,7 @@ private struct WelcomePage: View {
                         .frame(width: pulse ? 230 : 120, height: pulse ? 230 : 120)
                 } animation: { _ in .easeOut(duration: 1.8) }
                 Image("LogoMark").resizable().scaledToFit().frame(height: 96)
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                     .scaleEffect(shown ? 1 : 0.6)
             }
             .frame(height: 230)
