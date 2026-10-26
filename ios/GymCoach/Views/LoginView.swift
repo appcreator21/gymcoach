@@ -14,12 +14,10 @@ struct LoginView: View {
         ScrollView {
             VStack(spacing: 22) {
                 VStack(spacing: 10) {
-                    ZStack {
-                        Circle().fill(Theme.gradient).frame(width: 84, height: 84)
-                            .shadow(color: Theme.accent.opacity(0.6), radius: 24)
-                        Image(systemName: "figure.strengthtraining.traditional")
-                            .font(.system(size: 38, weight: .bold)).foregroundStyle(.white)
-                    }
+                    Image("LogoMark")
+                        .resizable().scaledToFit()
+                        .frame(height: 120)
+                        .shadow(color: Theme.accent.opacity(0.5), radius: 24)
                     Text("Surba Fit").font(.system(size: 36, weight: .heavy, design: .rounded))
                     Text("Train with Surba")
                         .font(.subheadline).foregroundStyle(.secondary)
