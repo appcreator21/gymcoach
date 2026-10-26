@@ -52,9 +52,42 @@ const withPWA = require('@ducanh2912/next-pwa').default({
 const withNextIntl = require('next-intl/plugin')('./i18n/request.ts');
 
 /** @type {import('next').NextConfig} */
+const path = require('path');
+
 const nextConfig = {
   output: 'standalone',
   reactStrictMode: true,
+  // The Cloudflare build (CF_BUILD=1) swaps in the workerd Prisma client, whose
+  // wasm query compiler is imported statically (Workers disallow compiling wasm
+  // at runtime). Every other build keeps the regular Node client.
+  webpack(config, { webpack }) {
+    if (process.env.CF_BUILD === '1') {
+      // A replacement plugin rewrites the request before tsconfig-path
+      // resolution, which a plain resolve.alias would lose to.
+      config.plugins.push(
+        new webpack.NormalModuleReplacementPlugin(
+          /^@\/prisma\/generated\/client$/,
+          path.resolve(__dirname, 'prisma/generated-worker/client.ts'),
+        ),
+      );
+      // Leave the wasm import untouched for the OpenNext/esbuild step, which
+      // knows how to load `.wasm?module` as a WebAssembly.Module on Workers.
+      const wasmPath = path.resolve(
+        __dirname,
+        'prisma/generated-worker/internal/query_compiler_fast_bg.wasm?module',
+      );
+      config.externals = [
+        ...(Array.isArray(config.externals) ? config.externals : [config.externals]),
+        ({ request }, callback) => {
+          if (request && /query_compiler_fast_bg\.wasm\?module$/.test(request)) {
+            return callback(null, `import ${wasmPath}`);
+          }
+          callback();
+        },
+      ];
+    }
+    return config;
+  },
 };
 
 module.exports = withPWA(withNextIntl(nextConfig));

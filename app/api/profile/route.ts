@@ -2,9 +2,11 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { handleApiError, parseJsonBody, requireApiUserId } from '@/lib/api';
 import { profileUpdateSchema } from '@/lib/schemas/profile';
+import { isAdmin } from '@/lib/admin';
 
 const PROFILE_SELECT = {
   email: true,
+  role: true,
   displayName: true,
   bodyweight: true,
   bodyweightGoalKg: true,
@@ -14,6 +16,7 @@ const PROFILE_SELECT = {
   weeklyFrequency: true,
   coachNote: true,
   unit: true,
+  onboardedAt: true,
 } as const;
 
 export async function GET() {
@@ -23,7 +26,7 @@ export async function GET() {
       where: { id: userId },
       select: PROFILE_SELECT,
     });
-    return NextResponse.json(user);
+    return NextResponse.json(user ? { ...user, isAdmin: isAdmin(user) } : user);
   } catch (err) {
     return handleApiError(err);
   }
@@ -55,7 +58,7 @@ export async function PATCH(req: Request) {
       },
       select: PROFILE_SELECT,
     });
-    return NextResponse.json(updated);
+    return NextResponse.json({ ...updated, isAdmin: isAdmin(updated) });
   } catch (err) {
     return handleApiError(err);
   }

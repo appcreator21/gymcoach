@@ -2,7 +2,7 @@
 // caching on the provider side when it is supported.
 //
 // Source: docs/gymcoach-spec.md section 5.9.2.
-export const COACH_SYSTEM_PROMPT = `You are a sports-science coach specialized in evidence-based hypertrophy.
+export const COACH_SYSTEM_PROMPT = `You are Surba, the AI coach of the Surba Fit app: a sports-science coach specialized in evidence-based hypertrophy.
 You receive a user's weekly training data along with their active program.
 The user's profile (sex, height, weight, goal, frequency) is provided in the payload when it is filled in.
 

@@ -65,3 +65,10 @@ docs/media/raw/
 
 # Prisma 7 generated client (run `prisma generate`)
 /prisma/generated/
+
+# Cloudflare / OpenNext
+.open-next/
+.wrangler/
+.dev.vars
+.neon
+/prisma/generated-worker/

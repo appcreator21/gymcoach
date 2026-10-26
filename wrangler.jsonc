@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "surbafit",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": { "enabled": true },
+  "vars": { "LLM_PROVIDER": "demo" },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "ee4df9bf9c9448e4a6eaec7a4248e5e2",
+      "localConnectionString": "postgresql://gymcoach:gymcoach@localhost:5432/gymcoach"
+    }
+  ]
+}

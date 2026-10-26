@@ -7,13 +7,27 @@ generator client {
   moduleFormat = "cjs"
 }
 
+// Same client for Cloudflare Workers: the wasm query compiler must be imported
+// statically there (runtime compilation is disallowed). Only the Cloudflare
+// build aliases to this output (see next.config.js).
+generator workerClient {
+  provider     = "prisma-client"
+  output       = "./generated-worker"
+  runtime      = "workerd"
+  moduleFormat = "esm"
+}
+
 datasource db {
   provider = "postgresql"
 }
 
 model User {
-  id                String             @id @default(cuid())
-  email             String             @unique
+  id                String                                @id @default(cuid())
+  email             String                                @unique
+  // Access level. ADMIN unlocks the /api/admin routes (client management and
+  // AI workout creation). Emails listed in ADMIN_EMAILS are admins too, which
+  // bootstraps the first admin without touching the database.
+  role              UserRole                              @default(USER)
   passwordHash      String
   // Bodyweight in kg, used to compute the effective tonnage on bodyweight
   // exercises (Set.weight = added load, always >= 0; the input schemas clamp
@@ -28,7 +42,7 @@ model User {
   weeklyFrequency   Int?
   // Preferred weight unit for display and input. Data is always stored in kg;
   // this only affects the presentation layer. Default keeps existing users on kg.
-  unit              WeightUnit         @default(KG)
+  unit              WeightUnit                            @default(KG)
   // End of the user's planned deload week (issue #112). While this timestamp
   // is in the future, load suggestions apply the planned-deload step-down.
   // Null or in the past = no planned deload (backward-safe additive column).
@@ -42,7 +56,16 @@ model User {
   // Target bodyweight in kg (issue #398), drawn as a goal line on the
   // bodyweight chart. Null = no goal (backward-safe additive column).
   bodyweightGoalKg  Float?
-  createdAt         DateTime           @default(now())
+  // Intake questionnaire answers (lib/schemas/onboarding.ts) and the time the
+  // client finished it. Null onboardedAt = show the onboarding flow.
+  onboarding        Json?
+  onboardedAt       DateTime?
+  // Per-client memory file (markdown): what the AI coach knows about this
+  // person. Seeded from the intake answers and rewritten after chats
+  // (lib/memory.ts). Capped to MEMORY_MAX_CHARS.
+  memory            String?                               @db.Text
+  memoryUpdatedAt   DateTime?
+  createdAt         DateTime                              @default(now())
   programs          Program[]
   sessions          Session[]
   exercises         Exercise[]
@@ -53,11 +76,11 @@ model User {
   bodyMeasurements  BodyMeasurement[]
   volumeTargets     VolumeTarget[]
   progressPhotos    ProgressPhoto[]
-  gyms              Gym[]              @relation("GymOwner")
+  gyms              Gym[]                                 @relation("GymOwner")
   mcpAccessTokens   McpAccessToken[]
   mcpBackfillAudits McpHistoricalEquipmentBackfillAudit[]
   activeGymId       String?
-  activeGym         Gym?               @relation("ActiveGym", fields: [activeGymId], references: [id], onDelete: SetNull)
+  activeGym         Gym?                                  @relation("ActiveGym", fields: [activeGymId], references: [id], onDelete: SetNull)
 }
 
 // Personal access tokens for remote MCP clients such as ChatGPT. Only a
@@ -95,6 +118,11 @@ model McpHistoricalEquipmentBackfillAudit {
   undoneAt          DateTime?
 
   @@index([userId, createdAt])
+}
+
+enum UserRole {
+  USER
+  ADMIN
 }
 
 enum Sex {
@@ -363,49 +391,49 @@ model GymEquipmentExercise {
 }
 
 model Set {
-  id                             String        @id @default(cuid())
-  sessionId                      String
-  session                        Session       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  exerciseId                     String
-  exercise                       Exercise      @relation(fields: [exerciseId], references: [id])
-  gymEquipmentId                 String?
-  gymEquipment                   GymEquipment? @relation(fields: [gymEquipmentId], references: [id], onDelete: SetNull)
-  equipmentNameSnapshot          String?
-  equipmentLoadSnapshot          Json?
-  setNumber                      Int
-  weight                         Float
-  reps                           Int
-  rir                            Int?
+  id                    String        @id @default(cuid())
+  sessionId             String
+  session               Session       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  exerciseId            String
+  exercise              Exercise      @relation(fields: [exerciseId], references: [id])
+  gymEquipmentId        String?
+  gymEquipment          GymEquipment? @relation(fields: [gymEquipmentId], references: [id], onDelete: SetNull)
+  equipmentNameSnapshot String?
+  equipmentLoadSnapshot Json?
+  setNumber             Int
+  weight                Float
+  reps                  Int
+  rir                   Int?
   // Cardio sets (issue #133, additive): duration in seconds (>= 1 when set)
   // and optional distance in meters. NULL on strength sets - existing rows
   // are untouched and lifting flows never write these.
-  durationSec                    Int?
-  distanceM                      Float?
+  durationSec           Int?
+  distanceM             Float?
   // Average heart rate in bpm (issue #152, additive): the extra signal a TCX
   // file import carries over manual logging. 40..250 when present (enforced
   // by every writer), NULL on strength sets and on cardio logged without it.
-  avgHr                          Int?
+  avgHr                 Int?
   // Maximum (peak) heart rate in bpm (issue #203, additive): the companion HR
   // metric watches record, carried in the same TCX exports. 40..250 when
   // present (enforced by every writer), NULL on strength sets and on cardio
   // logged without it.
-  maxHr                          Int?
+  maxHr                 Int?
   // Downsampled pace/HR track of an imported cardio activity (issue #254,
   // additive): a JSON array of up to a few hundred points
   // [{ t, d?, hr? }] where t = seconds from the start, d = cumulative meters,
   // hr = bpm. NULL on strength sets and on cardio logged without a track.
-  track                          Json?
-  notes                          String?
-  isWarmup                       Boolean       @default(false)
-  isDropSet                      Boolean       @default(false)
+  track                 Json?
+  notes                 String?
+  isWarmup              Boolean       @default(false)
+  isDropSet             Boolean       @default(false)
   // Block of a deliberately repeated exercise (issue #429, additive): when a
   // workout programs the same exercise more than once (5/3/1 BBB: the main
   // sets, then 5x10 of the same lift), the 0-based occurrence, in workout
   // order, of the row this set was logged against. NULL when the exercise
   // appears once, and on every row written before the column existed; readers
   // treat NULL as the first occurrence (lib/exercise-blocks.ts).
-  block                          Int?
-  completedAt                    DateTime      @default(now())
+  block                 Int?
+  completedAt           DateTime      @default(now())
 
   @@index([exerciseId, completedAt])
   // Leading on gymEquipmentId so the FK referential action (ON DELETE SET
@@ -563,4 +591,32 @@ model ReadinessCheckin {
   createdAt    DateTime @default(now())
 
   @@index([userId, createdAt])
+}
+
+// Notice from the admin shown on every user's home screen.
+model Announcement {
+  id        String   @id @default(cuid())
+  title     String
+  body      String   @db.Text
+  pinned    Boolean  @default(false)
+  authorId  String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// Reusable program saved by an admin (typically drafted with the AI). The
+// data column holds a GeneratedProgram (lib/schemas/program-generation.ts) and
+// is validated again when it is assigned to a client. createdById is a plain
+// scalar on purpose so templates outlive the admin account.
+model ProgramTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  phase       String
+  data        Json
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
 }
