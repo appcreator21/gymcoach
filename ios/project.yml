@@ -33,3 +33,4 @@ targets:
         # Set your Apple developer team here, or pick it in Xcode under Signing.
         DEVELOPMENT_TEAM: ""
         CODE_SIGN_STYLE: Automatic
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
