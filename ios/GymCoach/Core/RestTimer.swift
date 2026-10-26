@@ -10,7 +10,7 @@ final class RestTimer {
     private(set) var total: TimeInterval = 0
     private(set) var remaining: TimeInterval = 0
     private var ticker: Timer?
-    private static let notificationId = "gymcoach.rest"
+    private static let notificationId = "surbafit.rest"
 
     var isRunning: Bool { endDate != nil }
     var progress: Double { total > 0 ? 1 - remaining / total : 0 }

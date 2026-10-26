@@ -4,7 +4,7 @@ import Security
 /// Stores the account password so the app can silently sign back in when the
 /// 30 day session cookie expires.
 enum Keychain {
-    private static let service = "com.gymcoach.app.credentials"
+    private static let service = "com.surbafit.app.credentials"
 
     static func set(_ value: String, for account: String) {
         let data = Data(value.utf8)

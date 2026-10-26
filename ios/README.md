@@ -1,6 +1,6 @@
-# GymCoach for iOS
+# Surba Fit for iOS
 
-A native SwiftUI client for your self-hosted GymCoach server. It uses the same
+A native SwiftUI client for your Surba Fit server (this repo's backend). The AI coach is called Surba. It uses the same
 JSON API as the website (cookie session), so no server changes are needed:
 your programs, history, bodyweight and AI coach are all shared with the web app.
 
@@ -13,8 +13,18 @@ your programs, history, bodyweight and AI coach are all shared with the web app.
 - History: 12 week consistency heatmap and per-workout breakdowns.
 - Progress: Swift Charts for weekly volume, estimated 1RM per lift, and
   bodyweight with your goal line.
-- Coach: streaming AI chat, with the conversation kept between launches.
+- Surba: streaming AI chat, with the conversation kept between launches.
+- Admin tab (admins only): dashboard, client list and detail, role changes,
+  and "Create a workout with Surba": describe a goal, review the generated
+  program, save it to a client and optionally make it their active program.
 - Units (kg or lb), bodyweight logging, silent re-login via the Keychain.
+
+## Admin access
+
+Set `ADMIN_EMAILS=you@example.com` in the server environment (comma separated),
+restart, and apply the new migration (`npx prisma migrate deploy`). That account
+gets the Admin tab. Admins can promote other accounts from a client's page.
+Every `/api/admin` route is checked on the server; hiding the tab is only cosmetic.
 
 ## Run it on your iPhone
 
@@ -28,7 +38,7 @@ open GymCoach.xcodeproj
 ```
 
 1. In Xcode, select the GymCoach target, Signing & Capabilities, and pick your
-   Team (a free Apple ID works). Change the bundle identifier to something unique.
+   Team . Change the bundle identifier if `com.surbafit.app` is taken on your account.
 2. Plug in your iPhone, select it as the run destination, press Run. The first
    time, trust your developer profile in Settings, General, VPN & Device Management.
 3. Start the server (`docker compose up`, see the main README) and enter its

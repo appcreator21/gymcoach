@@ -38,7 +38,7 @@ struct SettingsView: View {
                     Button("Sign out", role: .destructive) { Task { await app.logout() } }
                 }
                 Section {
-                    Text("GymCoach for iOS. Your data stays on your own server.")
+                    Text("Surba Fit. Your data stays on your own server.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }

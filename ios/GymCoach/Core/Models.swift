@@ -112,6 +112,7 @@ struct Profile: Codable, Hashable {
     var unit: String
     var goal: String?
     var weeklyFrequency: Int?
+    var isAdmin: Bool? = nil
 
     var firstName: String {
         (displayName ?? email.split(separator: "@").first.map(String.init) ?? "Athlete")
@@ -137,4 +138,83 @@ struct ChartPoint: Identifiable {
     let id = UUID()
     let date: Date
     let value: Double
+}
+
+// MARK: Admin
+
+struct AdminOverview: Codable {
+    let users: Int
+    let newUsers30d: Int
+    let sessionsTotal: Int
+    let sessions7d: Int
+    let sets7d: Int
+    let activeUsers7d: Int
+}
+
+struct AdminUser: Codable, Identifiable, Hashable {
+    let id: String
+    let email: String
+    let displayName: String?
+    let role: String
+    let createdAt: Date
+    let goal: String?
+    let sessionCount: Int
+    let lastSessionAt: Date?
+    let activeProgram: String?
+
+    var name: String { displayName ?? email }
+    var isAdmin: Bool { role == "ADMIN" }
+}
+
+struct AdminProgramRef: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let phase: String
+    let isActive: Bool
+}
+
+struct AdminSessionRef: Codable, Identifiable, Hashable {
+    let id: String
+    let startedAt: Date
+    let finishedAt: Date?
+    let workout: NamedRef?
+    let _count: CountRef?
+}
+
+struct AdminUserDetail: Codable {
+    let id: String
+    let email: String
+    let displayName: String?
+    var role: String
+    let createdAt: Date
+    let goal: String?
+    let weeklyFrequency: Int?
+    let bodyweight: Double?
+    let coachNote: String?
+    let programs: [AdminProgramRef]
+    let sessions: [AdminSessionRef]
+}
+
+/// Preview of a program drafted by Surba. The full JSON is kept separately
+/// and sent back untouched when saving, so no field is lost.
+struct DraftProgram: Codable {
+    struct DraftExercise: Codable, Identifiable {
+        var id: String { name }
+        let name: String
+        let muscleGroup: String
+        let targetSets: Int
+        let targetRepsMin: Int
+        let targetRepsMax: Int
+        let targetRIR: Int
+        let restSec: Int
+    }
+    struct DraftWorkout: Codable, Identifiable {
+        var id: String { name }
+        let name: String
+        let exercises: [DraftExercise]
+    }
+    let name: String
+    let description: String?
+    let phase: String
+    let workouts: [DraftWorkout]
 }

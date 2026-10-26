@@ -18,17 +18,17 @@ targets:
     info:
       path: GymCoach/Info.plist
       properties:
-        CFBundleDisplayName: GymCoach
+        CFBundleDisplayName: Surba Fit
         UILaunchScreen: {}
         UIUserInterfaceStyle: Dark
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        NSLocalNetworkUsageDescription: GymCoach connects to your self-hosted GymCoach server.
+        NSLocalNetworkUsageDescription: Surba Fit connects to your Surba Fit server.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.gymcoach.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.surbafit.app
         TARGETED_DEVICE_FAMILY: "1"
         # Set your Apple developer team here, or pick it in Xcode under Signing.
         DEVELOPMENT_TEAM: ""

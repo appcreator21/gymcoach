@@ -35,13 +35,18 @@ struct RootView: View {
 }
 
 struct MainTabs: View {
+    @Environment(AppState.self) private var app
+
     var body: some View {
         TabView {
             HomeView().tabItem { Label("Today", systemImage: "flame.fill") }
             HistoryView().tabItem { Label("History", systemImage: "calendar") }
             ProgressTab().tabItem { Label("Progress", systemImage: "chart.line.uptrend.xyaxis") }
-            CoachView().tabItem { Label("Coach", systemImage: "sparkles") }
+            CoachView().tabItem { Label("Surba", systemImage: "sparkles") }
             SettingsView().tabItem { Label("You", systemImage: "person.crop.circle") }
+            if app.profile?.isAdmin == true {
+                AdminView().tabItem { Label("Admin", systemImage: "shield.lefthalf.filled") }
+            }
         }
         .toolbarBackground(.ultraThinMaterial, for: .tabBar)
     }

@@ -106,7 +106,7 @@ struct CoachView: View {
                 }
                 inputBar
             }
-            .navigationTitle("Coach")
+            .navigationTitle("Surba")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { model.newChat() } label: { Image(systemName: "square.and.pencil") }
@@ -119,8 +119,8 @@ struct CoachView: View {
     private var intro: some View {
         VStack(spacing: 14) {
             Image(systemName: "sparkles").font(.system(size: 38)).foregroundStyle(Theme.gradient)
-            Text("Ask your coach anything").font(.system(.title3, design: .rounded, weight: .bold))
-            Text("It knows your program, recent sessions and progression.")
+            Text("Ask Surba anything").font(.system(.title3, design: .rounded, weight: .bold))
+            Text("Surba knows your program, recent sessions and progression.")
                 .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
             ForEach(suggestions, id: \.self) { s in
                 Button { Task { await model.send(s) } } label: {
@@ -136,7 +136,7 @@ struct CoachView: View {
 
     private var inputBar: some View {
         HStack(alignment: .bottom, spacing: 10) {
-            TextField("Message your coach", text: $model.input, axis: .vertical)
+            TextField("Message Surba", text: $model.input, axis: .vertical)
                 .lineLimit(1...5)
                 .focused($focused)
                 .padding(.horizontal, 14).padding(.vertical, 11)

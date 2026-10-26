@@ -20,8 +20,8 @@ struct LoginView: View {
                         Image(systemName: "figure.strengthtraining.traditional")
                             .font(.system(size: 38, weight: .bold)).foregroundStyle(.white)
                     }
-                    Text("GymCoach").font(.system(size: 36, weight: .heavy, design: .rounded))
-                    Text("Train smarter with your AI coach")
+                    Text("Surba Fit").font(.system(size: 36, weight: .heavy, design: .rounded))
+                    Text("Train with Surba")
                         .font(.subheadline).foregroundStyle(.secondary)
                 }
                 .padding(.top, 56)

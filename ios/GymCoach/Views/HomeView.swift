@@ -103,7 +103,7 @@ struct HomeView: View {
             GlassCard {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("No active program").font(.headline)
-                    Text(app.loadError ?? "Create or activate a program on the GymCoach website, or ask the Coach tab to build one.")
+                    Text(app.loadError ?? "Create or activate a program on the Surba Fit website, or ask Surba to build one.")
                         .font(.subheadline).foregroundStyle(.secondary)
                 }
             }

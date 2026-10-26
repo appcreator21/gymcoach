@@ -14,6 +14,10 @@ datasource db {
 model User {
   id                String             @id @default(cuid())
   email             String             @unique
+  // Access level. ADMIN unlocks the /api/admin routes (client management and
+  // AI workout creation). Emails listed in ADMIN_EMAILS are admins too, which
+  // bootstraps the first admin without touching the database.
+  role              UserRole           @default(USER)
   passwordHash      String
   // Bodyweight in kg, used to compute the effective tonnage on bodyweight
   // exercises (Set.weight = added load, always >= 0; the input schemas clamp
@@ -95,6 +99,11 @@ model McpHistoricalEquipmentBackfillAudit {
   undoneAt          DateTime?
 
   @@index([userId, createdAt])
+}
+
+enum UserRole {
+  USER
+  ADMIN
 }
 
 enum Sex {
