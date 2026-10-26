@@ -85,6 +85,7 @@ struct CoachView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                header
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 12) {
@@ -106,21 +107,43 @@ struct CoachView: View {
                 }
                 inputBar
             }
-            .navigationTitle("Surba")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { model.newChat() } label: { Image(systemName: "square.and.pencil") }
-                }
-            }
+            .toolbar(.hidden, for: .navigationBar)
             .task { await model.loadHistory() }
         }
     }
 
+    /// Surba's face and name at the top-left, new chat at the top-right.
+    private var header: some View {
+        HStack(spacing: 12) {
+            CoachAvatar(size: 44, online: true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Surba").font(.system(.title3, design: .rounded, weight: .bold))
+                Text("Your coach").font(.footnote).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button {
+                Haptics.select()
+                model.newChat()
+            } label: {
+                Image(systemName: "square.and.pencil")
+                    .font(.headline)
+                    .frame(width: 40, height: 40)
+                    .background(Theme.card, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.accent)
+            .accessibilityLabel("New chat")
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
+        .padding(.bottom, 8)
+    }
+
     private var intro: some View {
         VStack(spacing: 14) {
-            Image(systemName: "sparkles").font(.system(size: 38)).foregroundStyle(Theme.accent)
-            Text("Ask Surba anything").font(.system(.title3, design: .rounded, weight: .bold))
-            Text("Surba knows your program, recent sessions and progression.")
+            CoachAvatar(size: 120, online: true)
+            Text("Hey, I'm Surba").font(.system(.title2, design: .rounded, weight: .bold))
+            Text("Ask me anything. I know your program, your recent sessions and how you're progressing.")
                 .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
             ForEach(suggestions, id: \.self) { s in
                 Button { Task { await model.send(s) } } label: {
@@ -159,8 +182,8 @@ struct Bubble: View {
     let isStreaming: Bool
 
     var body: some View {
-        HStack {
-            if message.isUser { Spacer(minLength: 50) }
+        HStack(alignment: .bottom, spacing: 8) {
+            if message.isUser { Spacer(minLength: 50) } else { CoachAvatar(size: 28) }
             Group {
                 if message.content.isEmpty && isStreaming {
                     ProgressView().padding(.vertical, 4)
@@ -185,5 +208,42 @@ struct Bubble: View {
     private var rendered: AttributedString {
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         return (try? AttributedString(markdown: message.content, options: options)) ?? AttributedString(message.content)
+    }
+}
+
+/// Surba's headshot in a circle. Used as the coach's face across the app.
+/// With `online` it carries a green presence dot at the bottom-right corner.
+struct CoachAvatar: View {
+    var size: CGFloat
+    var online = false
+
+    private var dot: CGFloat { max(9, size * 0.24) }
+
+    var body: some View {
+        Image("SurbaCoach")
+            .resizable()
+            .scaledToFill()
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+            .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: max(1, size / 60)))
+            .overlay(alignment: .bottomTrailing) {
+                if online { presenceDot }
+            }
+            .accessibilityLabel(online ? "Surba, online" : "Surba")
+    }
+
+    private var presenceDot: some View {
+        let green = Color(red: 0.20, green: 0.80, blue: 0.36)
+        return ZStack {
+            // Slow pulse so he reads as live.
+            PhaseAnimator([false, true]) { grow in
+                Circle().fill(green.opacity(grow ? 0 : 0.5))
+                    .scaleEffect(grow ? 2.1 : 1)
+            } animation: { _ in .easeOut(duration: 1.6) }
+            Circle().fill(green)
+        }
+        .frame(width: dot, height: dot)
+        .overlay(Circle().strokeBorder(Theme.background, lineWidth: max(2, dot * 0.2)))
+        .offset(x: dot / 2 - size * 0.146, y: dot / 2 - size * 0.146)
     }
 }
