@@ -71,6 +71,15 @@ struct SettingsView: View {
                     NavigationLink("Lift goals") { GoalsView() }
                     NavigationLink("Measurements") { MeasurementsView() }
                 }
+                if app.profile?.isAdmin == true {
+                    Section("Admin") {
+                        NavigationLink {
+                            AdminView(embedded: true)
+                        } label: {
+                            Label("Admin portal", systemImage: "shield.lefthalf.filled")
+                        }
+                    }
+                }
                 Section("Surba") {
                     NavigationLink("What Surba knows about you") { MemoryView() }
                 }

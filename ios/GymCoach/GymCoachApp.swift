@@ -49,9 +49,6 @@ struct MainTabs: View {
             ProgressTab().tabItem { Label("Progress", systemImage: "chart.line.uptrend.xyaxis") }.tag(2)
             CoachView().tabItem { Label("Surba", systemImage: "sparkles") }.tag(3)
             SettingsView().tabItem { Label("You", systemImage: "person.crop.circle") }.tag(4)
-            if app.profile?.isAdmin == true {
-                AdminView().tabItem { Label("Admin", systemImage: "shield.lefthalf.filled") }.tag(5)
-            }
         }
         .toolbarBackground(Theme.background, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)

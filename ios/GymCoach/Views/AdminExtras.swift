@@ -139,12 +139,15 @@ struct TemplateDetailView: View {
     let summary: TemplateSummary
     @State private var program: DraftProgram?
     @State private var error: String?
-    @State private var showAssign = false
+    @State private var editing = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 if let program {
+                    if let description = program.description, !description.isEmpty {
+                        Text(description).font(.subheadline).foregroundStyle(.secondary)
+                    }
                     ForEach(program.workouts) { w in
                         GlassCard {
                             VStack(alignment: .leading, spacing: 8) {
@@ -161,9 +164,10 @@ struct TemplateDetailView: View {
                         }
                     }
                     NavigationLink { AssignTemplateView(client: nil, template: summary) } label: {
-                        Text("Assign to a client").font(.system(.headline, design: .rounded))
-                            .foregroundStyle(.white).frame(maxWidth: .infinity).padding(.vertical, 15)
-                            .background(Theme.accent, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        Text("Assign to a client")
+                            .font(.system(.headline, design: .rounded))
+                            .foregroundStyle(.black).frame(maxWidth: .infinity).padding(.vertical, 15)
+                            .background(Color.white, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
                 } else if let error {
                     Text(error).foregroundStyle(.red)
@@ -173,14 +177,157 @@ struct TemplateDetailView: View {
             }
             .padding(.horizontal, 16)
         }
-        .navigationTitle(summary.name)
+        .navigationTitle(program?.name ?? summary.name)
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            do {
-                let detail: TemplateDetail = try await APIClient.shared.get("/api/admin/templates/\(summary.id)")
-                program = detail.program
-            } catch { self.error = error.localizedDescription }
+        .toolbar {
+            if program != nil {
+                ToolbarItem(placement: .topBarTrailing) { Button("Edit") { editing = true } }
+            }
         }
+        .sheet(isPresented: $editing) {
+            if let current = program {
+                TemplateEditorView(templateId: summary.id, program: current) { updated in
+                    self.program = updated
+                }
+            }
+        }
+        .task { await load() }
+    }
+
+    private func load() async {
+        do {
+            let detail: TemplateDetail = try await APIClient.shared.get("/api/admin/templates/\(summary.id)")
+            program = detail.program
+        } catch { self.error = error.localizedDescription }
+    }
+}
+
+/// Edits a saved template: details, workouts and every exercise's sets, reps,
+/// effort and rest. Saves the whole program back; the server validates it.
+struct TemplateEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+    let templateId: String
+    var onSaved: (DraftProgram) -> Void
+    @State private var program: DraftProgram
+    @State private var saving = false
+    @State private var error: String?
+
+    init(templateId: String, program: DraftProgram, onSaved: @escaping (DraftProgram) -> Void) {
+        self.templateId = templateId
+        self.onSaved = onSaved
+        _program = State(initialValue: program)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Details") {
+                    TextField("Name", text: $program.name)
+                    TextField("Phase", text: $program.phase)
+                    TextField("Description", text: Binding(
+                        get: { program.description ?? "" },
+                        set: { program.description = $0.isEmpty ? nil : $0 }), axis: .vertical)
+                        .lineLimit(1...4)
+                }
+                ForEach($program.workouts) { $workout in
+                    WorkoutEditorSection(workout: $workout) { removeWorkout(workout.uid) }
+                }
+                Section {
+                    Button {
+                        Haptics.tap()
+                        program.workouts.append(.init(name: "New workout", dayOfWeek: nil, exercises: [.blank()]))
+                    } label: { Label("Add workout", systemImage: "plus.circle") }
+                }
+                if let error {
+                    Section { Text(error).font(.footnote).foregroundStyle(.red) }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Theme.background)
+            .navigationTitle("Edit template")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .topBarTrailing) {
+                    if saving { ProgressView() } else { Button("Save") { Task { await save() } } }
+                }
+                ToolbarItem(placement: .bottomBar) { EditButton() }
+            }
+        }
+    }
+
+    private func removeWorkout(_ uid: UUID) {
+        Haptics.warning()
+        program.workouts.removeAll { $0.uid == uid }
+    }
+
+    private func save() async {
+        saving = true
+        error = nil
+        defer { saving = false }
+        do {
+            let data = try JSONEncoder().encode(program)
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+            _ = try await APIClient.shared.raw("PATCH", "/api/admin/templates/\(templateId)", json: ["program": json])
+            Haptics.success()
+            onSaved(program)
+            dismiss()
+        } catch {
+            self.error = error.localizedDescription
+            Haptics.warning()
+        }
+    }
+}
+
+private struct WorkoutEditorSection: View {
+    @Binding var workout: DraftProgram.DraftWorkout
+    let onDelete: () -> Void
+
+    var body: some View {
+        Section {
+            TextField("Workout name", text: $workout.name).font(.headline)
+            ForEach($workout.exercises) { $exercise in
+                ExerciseRowEditor(exercise: $exercise)
+            }
+            .onDelete(perform: deleteExercises)
+            .onMove(perform: moveExercises)
+            Button(action: addExercise) { Label("Add exercise", systemImage: "plus") }
+            Button("Delete workout", role: .destructive, action: onDelete)
+        }
+    }
+
+    private func deleteExercises(_ offsets: IndexSet) { workout.exercises.remove(atOffsets: offsets) }
+    private func moveExercises(_ from: IndexSet, _ to: Int) { workout.exercises.move(fromOffsets: from, toOffset: to) }
+    private func addExercise() {
+        Haptics.tap()
+        workout.exercises.append(.blank())
+    }
+}
+
+private struct ExerciseRowEditor: View {
+    @Binding var exercise: DraftProgram.DraftExercise
+
+    private static let muscles = [
+        "CHEST", "BACK_WIDTH", "BACK_THICKNESS", "SHOULDERS_FRONT", "SHOULDERS_LATERAL", "SHOULDERS_REAR",
+        "BICEPS", "TRICEPS", "FOREARMS", "QUADS", "HAMSTRINGS", "GLUTES", "CALVES", "ABS", "LOWER_BACK",
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextField("Exercise", text: $exercise.name)
+            Picker("Muscle", selection: $exercise.muscleGroup) {
+                ForEach(Self.muscles, id: \.self) { Text(Exercise.pretty($0)).tag($0) }
+            }
+            Stepper("Sets: \(exercise.targetSets)", value: $exercise.targetSets, in: 1...20)
+            Stepper("Reps min: \(exercise.targetRepsMin)", value: $exercise.targetRepsMin, in: 1...50)
+                .onChange(of: exercise.targetRepsMin) { _, new in
+                    if exercise.targetRepsMax < new { exercise.targetRepsMax = new }
+                }
+            Stepper("Reps max: \(exercise.targetRepsMax)", value: $exercise.targetRepsMax, in: exercise.targetRepsMin...50)
+            Stepper("Reps in reserve: \(exercise.targetRIR)", value: $exercise.targetRIR, in: 0...5)
+            Stepper("Rest: \(exercise.restSec) s", value: $exercise.restSec, in: 15...600, step: 15)
+        }
+        .padding(.vertical, 4)
     }
 }
 

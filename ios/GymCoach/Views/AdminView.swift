@@ -1,12 +1,24 @@
 import SwiftUI
 
+/// Wraps content in its own NavigationStack unless it is already pushed from one.
+struct AdminContainer<Content: View>: View {
+    let embedded: Bool
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        if embedded { content } else { NavigationStack { content } }
+    }
+}
+
 struct AdminView: View {
+    /// True when pushed from another screen (Settings), so it must not nest a second stack.
+    var embedded = false
     @State private var overview: AdminOverview?
     @State private var error: String?
     @State private var showBuilder = false
 
     var body: some View {
-        NavigationStack {
+        AdminContainer(embedded: embedded) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     Button { showBuilder = true } label: {

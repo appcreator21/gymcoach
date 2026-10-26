@@ -198,26 +198,52 @@ struct AdminUserDetail: Codable {
 
 /// Preview of a program drafted by Surba. The full JSON is kept separately
 /// and sent back untouched when saving, so no field is lost.
+/// A generated or saved program. Round-trips every field the server stores, so
+/// editing a template in the app never drops data (the server validates on save).
 struct DraftProgram: Codable {
     struct DraftExercise: Codable, Identifiable {
-        var id: String { name }
-        let name: String
-        let muscleGroup: String
-        let targetSets: Int
-        let targetRepsMin: Int
-        let targetRepsMax: Int
-        let targetRIR: Int
-        let restSec: Int
+        var uid = UUID()
+        var id: UUID { uid }
+        var name: String
+        var muscleGroup: String
+        var category: String
+        var equipmentType: String?
+        var targetSets: Int
+        var targetRepsMin: Int
+        var targetRepsMax: Int
+        var targetRIR: Int
+        var restSec: Int
+        var autoregulationMode: String?
+        var fatigueRate: Double?
+        var loadAdjustmentPct: Double?
+        var supersetGroup: Int?
+        var tempo: String?
+        var notes: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case name, muscleGroup, category, equipmentType, targetSets, targetRepsMin, targetRepsMax
+            case targetRIR, restSec, autoregulationMode, fatigueRate, loadAdjustmentPct
+            case supersetGroup, tempo, notes
+        }
+
+        static func blank() -> DraftExercise {
+            DraftExercise(name: "", muscleGroup: "CHEST", category: "COMPOUND", equipmentType: nil,
+                          targetSets: 3, targetRepsMin: 8, targetRepsMax: 12, targetRIR: 2, restSec: 90)
+        }
     }
     struct DraftWorkout: Codable, Identifiable {
-        var id: String { name }
-        let name: String
-        let exercises: [DraftExercise]
+        var uid = UUID()
+        var id: UUID { uid }
+        var name: String
+        var dayOfWeek: Int?
+        var exercises: [DraftExercise]
+
+        private enum CodingKeys: String, CodingKey { case name, dayOfWeek, exercises }
     }
-    let name: String
-    let description: String?
-    let phase: String
-    let workouts: [DraftWorkout]
+    var name: String
+    var description: String?
+    var phase: String
+    var workouts: [DraftWorkout]
 }
 
 struct Announcement: Codable, Identifiable, Hashable {
