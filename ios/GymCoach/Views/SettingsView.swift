@@ -3,6 +3,10 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(AppState.self) private var app
     @State private var showWeight = false
+    @AppStorage(Prefs.keepAwake) private var keepAwake = true
+    @AppStorage(Prefs.autoRest) private var autoRest = true
+    @AppStorage(Prefs.healthSync) private var healthSync = false
+    @State private var healthMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -29,6 +33,43 @@ struct SettingsView: View {
                         Text("Pounds").tag(true)
                     }
                     Button("Log bodyweight") { showWeight = true }
+                }
+                Section("Workouts") {
+                    Toggle("Keep screen awake", isOn: $keepAwake)
+                    Toggle("Start rest timer after each set", isOn: $autoRest)
+                }
+                Section("Apple Health") {
+                    Toggle("Save workouts to Health", isOn: Binding(
+                        get: { healthSync },
+                        set: { on in
+                            if on {
+                                Task {
+                                    let ok = await HealthKitManager.shared.requestAccess()
+                                    healthSync = ok
+                                    healthMessage = ok ? nil : "Health access is not available. Check Settings > Health."
+                                }
+                            } else { healthSync = false }
+                        }))
+                    Button("Import latest weight from Health") {
+                        Task {
+                            guard await HealthKitManager.shared.requestAccess(),
+                                  let kg = await HealthKitManager.shared.latestBodyweightKg() else {
+                                healthMessage = "No weight found in Health."
+                                return
+                            }
+                            do {
+                                try await app.logBodyweight(valueInDisplayUnit: app.units.display(kg))
+                                healthMessage = "Imported \(app.units.format(kg))."
+                            } catch { healthMessage = error.localizedDescription }
+                        }
+                    }
+                    if let healthMessage { Text(healthMessage).font(.footnote).foregroundStyle(.secondary) }
+                }
+                Section("Progress") {
+                    NavigationLink("Achievements") { AchievementsView() }
+                    NavigationLink("Personal records") { RecordsView() }
+                    NavigationLink("Lift goals") { GoalsView() }
+                    NavigationLink("Measurements") { MeasurementsView() }
                 }
                 Section("Surba") {
                     NavigationLink("What Surba knows about you") { MemoryView() }

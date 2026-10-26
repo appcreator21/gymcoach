@@ -15,8 +15,10 @@ struct ProgressTab: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     volumeCard
+                    MuscleVolumeCard()
                     strengthCard
                     bodyweightCard
+                    trackingLinks
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 30)
@@ -27,6 +29,28 @@ struct ProgressTab: View {
                 LogBodyweightSheet().presentationDetents([.height(280)])
             }
         }
+    }
+
+    private var trackingLinks: some View {
+        VStack(spacing: 10) {
+            link("Personal records", icon: "trophy.fill") { RecordsView() }
+            link("Lift goals", icon: "target") { GoalsView() }
+            link("Measurements", icon: "ruler.fill") { MeasurementsView() }
+            link("Achievements", icon: "medal.fill") { AchievementsView() }
+        }
+    }
+
+    private func link<D: View>(_ title: String, icon: String, @ViewBuilder destination: () -> D) -> some View {
+        NavigationLink { destination() } label: {
+            GlassCard {
+                HStack {
+                    Label(title, systemImage: icon).font(.system(.headline, design: .rounded))
+                    Spacer()
+                    Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     private var volumeCard: some View {

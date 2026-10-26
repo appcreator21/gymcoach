@@ -16,6 +16,8 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     announcementCards
                     weekCard
+                    WeekStrip()
+                    ReadinessCard()
                     tiles
                     upNext
                     recent

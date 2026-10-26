@@ -2,3 +2,4 @@ GymCoach/Info.plist
 *.xcodeproj
 xcuserdata/
 DerivedData/
+GymCoach/GymCoach.entitlements

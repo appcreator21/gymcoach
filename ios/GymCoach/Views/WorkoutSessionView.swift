@@ -22,6 +22,8 @@ final class SessionViewModel {
     var error: String?
     var prBanner: String?
     var confettiTick = 0
+    var logged: [String: SetEntry] = [:]
+    var prNames: [String] = []
     var isStarting = true
     var isBusy = false
 
@@ -43,6 +45,7 @@ final class SessionViewModel {
             sessionId = created.id
             startedAt = created.startedAt
             let detail: SessionDetail = try await api.get("/api/sessions/\(created.id)")
+            for s in detail.sets { logged[s.id] = s }
             buildDrafts(existing: detail.sets)
         } catch {
             self.error = error.localizedDescription
@@ -103,6 +106,7 @@ final class SessionViewModel {
         if let serverId = row.serverId {
             do {
                 _ = try await api.raw("DELETE", "/api/sets/\(serverId)")
+                logged[serverId] = nil
                 row.serverId = nil
                 row.isPR = false
                 rows[index] = row
@@ -131,11 +135,12 @@ final class SessionViewModel {
         do {
             let created: SetEntry = try await api.send("POST", "/api/sessions/\(sessionId)/sets", json: body)
             row.serverId = created.id
+            logged[created.id] = created
             if !isCardio { checkPR(pe, entry: created, row: &row) }
             rows[index] = row
             drafts[pe.id] = rows
             Haptics.thud()
-            timer.start(seconds: pe.restSec)
+            if Prefs.bool(Prefs.autoRest, default: true) { timer.start(seconds: pe.restSec) }
         } catch {
             self.error = error.localizedDescription
             Haptics.warning()
@@ -150,6 +155,7 @@ final class SessionViewModel {
         if prior > 0 && e1 > best + 0.01 {
             row.isPR = true
             prBanner = "New PR on \(pe.exercise.name): \(app.units.format(entry.weight)) x \(entry.reps)"
+            if !prNames.contains(prLine(pe, entry)) { prNames.append(prLine(pe, entry)) }
             confettiTick += 1
             Haptics.success()
             Task {
@@ -164,12 +170,31 @@ final class SessionViewModel {
         do {
             _ = try await api.raw("PUT", "/api/sessions/\(sessionId)", json: ["finish": true])
             timer.stop()
+            if Prefs.bool(Prefs.healthSync, default: false) {
+                await HealthKitManager.shared.saveWorkout(start: startedAt, end: Date())
+            }
             await app.refresh()
             return true
         } catch {
             self.error = error.localizedDescription
             return false
         }
+    }
+
+    private func prLine(_ pe: ProgramExercise, _ entry: SetEntry) -> String {
+        "\(pe.exercise.name): \(app.units.format(entry.weight)) x \(entry.reps)"
+    }
+
+    func makeSummary() -> WorkoutSummary {
+        let sets = Array(logged.values)
+        let exerciseIds = Set(sets.map(\.exerciseId))
+        return WorkoutSummary(
+            title: workout.name,
+            duration: Date().timeIntervalSince(startedAt),
+            sets: sets.count,
+            exercises: exerciseIds.count,
+            volumeKg: sets.reduce(0) { $0 + $1.volume },
+            prs: prNames)
     }
 
     func discard() async {
@@ -188,6 +213,7 @@ struct WorkoutSessionView: View {
     @State private var model: SessionViewModel?
     @State private var showFinish = false
     @State private var showPlates = false
+    @State private var summary: WorkoutSummary?
 
     var body: some View {
         ZStack {
@@ -203,8 +229,10 @@ struct WorkoutSessionView: View {
             let m = SessionViewModel(workout: workout, app: app, timer: timer)
             model = m
             timer.requestPermission()
+            UIApplication.shared.isIdleTimerDisabled = Prefs.bool(Prefs.keepAwake, default: true)
             await m.start()
         }
+        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
     }
 
     @ViewBuilder
@@ -248,7 +276,7 @@ struct WorkoutSessionView: View {
         } message: { Text(model.error ?? "") }
         .confirmationDialog("Finish workout?", isPresented: $showFinish, titleVisibility: .visible) {
             Button("Finish and save") {
-                Task { if await model.finish() { dismiss() } }
+                Task { if await model.finish() { summary = model.makeSummary() } }
             }
             Button("Discard workout", role: .destructive) {
                 Task { await model.discard(); dismiss() }
@@ -257,6 +285,7 @@ struct WorkoutSessionView: View {
         } message: {
             Text("\(model.completedSets) sets logged")
         }
+        .sheet(item: $summary, onDismiss: { dismiss() }) { WorkoutSummaryView(summary: $0) }
         .sheet(isPresented: $showPlates) { PlateCalculatorView().presentationDetents([.medium, .large]) }
     }
 
@@ -298,6 +327,7 @@ struct ExerciseCard: View {
     @Environment(AppState.self) private var app
     let model: SessionViewModel
     let pe: ProgramExercise
+    @State private var showWarmup = false
 
     var body: some View {
         let rows = model.drafts[pe.id] ?? []
@@ -311,6 +341,13 @@ struct ExerciseCard: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
+                    if !isCardio {
+                        Button { showWarmup = true } label: {
+                            Image(systemName: "flame").font(.footnote.weight(.semibold))
+                                .padding(7).background(Theme.field, in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                    }
                     Text("\(rows.filter { $0.serverId != nil }.count)/\(rows.count)")
                         .font(.caption.monospacedDigit().weight(.semibold))
                         .padding(.horizontal, 8).padding(.vertical, 4)
@@ -342,6 +379,11 @@ struct ExerciseCard: View {
                 }
                 .padding(.top, 2)
             }
+        }
+        .sheet(isPresented: $showWarmup) {
+            WarmupSheet(exercise: pe.exercise,
+                        workingWeight: Double((model.drafts[pe.id]?.first?.weight ?? "").replacingOccurrences(of: ",", with: ".")) ?? 0)
+                .presentationDetents([.medium])
         }
     }
 }

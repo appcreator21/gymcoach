@@ -24,8 +24,15 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSLocalNetworkUsageDescription: Surba Fit connects to your Surba Fit server.
+        NSHealthShareUsageDescription: Surba Fit can read your bodyweight from Apple Health.
+        NSHealthUpdateUsageDescription: Surba Fit can save your finished workouts and bodyweight to Apple Health.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+    entitlements:
+      path: GymCoach/GymCoach.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.surbafit.app
