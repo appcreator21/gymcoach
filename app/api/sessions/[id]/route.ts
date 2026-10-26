@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { sessionUpdateSchema } from '@/lib/schemas/session';
+import { applyClockAction, ClockError, type ClockAction } from '@/lib/session-clock';
 import { ApiError, handleApiError, parseJsonBody, requireApiUserId } from '@/lib/api';
 
 interface Params {
@@ -46,11 +47,31 @@ export async function PUT(req: Request, props: Params) {
     if (!session) throw new ApiError(404, 'Session not found.');
     const data = await parseJsonBody(req, sessionUpdateSchema);
 
+    const action: ClockAction | null = data.finish
+      ? 'finish'
+      : data.pause
+        ? 'pause'
+        : data.resume
+          ? 'resume'
+          : data.reopen
+            ? 'reopen'
+            : null;
+
+    let clock: Partial<{ finishedAt: Date | null; pausedAt: Date | null; pausedSec: number }> = {};
+    if (action) {
+      try {
+        clock = applyClockAction(session, action, new Date());
+      } catch (err) {
+        if (err instanceof ClockError) throw new ApiError(400, err.message);
+        throw err;
+      }
+    }
+
     const updated = await db.session.update({
       where: { id: params.id, userId },
       data: {
-        notes: data.notes ?? session.notes,
-        finishedAt: data.finish ? new Date() : session.finishedAt,
+        ...clock,
+        ...(data.notes !== undefined ? { notes: data.notes ? data.notes : null } : {}),
       },
     });
     return NextResponse.json(updated);

@@ -313,6 +313,11 @@ model Session {
   workout    Workout?  @relation(fields: [workoutId], references: [id])
   startedAt  DateTime  @default(now())
   finishedAt DateTime?
+  // Pause state. pausedAt is set while the workout is paused; pausedSec is the
+  // total time spent paused in earlier pauses. Active time is the elapsed time
+  // minus both (lib/session-clock.ts). Additive, so existing rows read 0/null.
+  pausedAt   DateTime?
+  pausedSec  Int       @default(0)
   notes      String?
   // The gym is frozen when the session starts so later switching gyms does
   // not change the inventory used by an in-progress or historical workout.

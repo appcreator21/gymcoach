@@ -1,238 +1,68 @@
 import SwiftUI
 
-struct DraftSet: Identifiable {
-    let id = UUID()
-    var number: Int
-    var weight: String
-    var reps: String
-    var serverId: String?
-    var isPR = false
-}
-
-@Observable
-@MainActor
-final class SessionViewModel {
-    let workout: Workout
-    unowned let app: AppState
-    let timer: RestTimer
-
-    var sessionId: String?
-    var startedAt = Date()
-    var drafts: [String: [DraftSet]] = [:]
-    var error: String?
-    var prBanner: String?
-    var confettiTick = 0
-    var logged: [String: SetEntry] = [:]
-    var prNames: [String] = []
-    var isStarting = true
-    var isBusy = false
-
-    @ObservationIgnored private let api = APIClient.shared
-    @ObservationIgnored private var sessionBest: [String: Double] = [:]
-
-    init(workout: Workout, app: AppState, timer: RestTimer) {
-        self.workout = workout
-        self.app = app
-        self.timer = timer
-    }
-
-    var exercises: [ProgramExercise] { (workout.exercises ?? []).sorted { $0.order < $1.order } }
-    var completedSets: Int { drafts.values.flatMap { $0 }.filter { $0.serverId != nil }.count }
-
-    func start() async {
-        do {
-            let created: StartedSession = try await api.send("POST", "/api/sessions", json: ["workoutId": workout.id])
-            sessionId = created.id
-            startedAt = created.startedAt
-            let detail: SessionDetail = try await api.get("/api/sessions/\(created.id)")
-            for s in detail.sets { logged[s.id] = s }
-            buildDrafts(existing: detail.sets)
-        } catch {
-            self.error = error.localizedDescription
-        }
-        isStarting = false
-    }
-
-    private func buildDrafts(existing: [SetEntry]) {
-        let units = app.units
-        for pe in exercises {
-            let done = existing.filter { $0.exerciseId == pe.exercise.id }.sorted { $0.setNumber < $1.setNumber }
-            let previous = app.lastSets(for: pe.exercise.id, excluding: sessionId)
-            let count = max(pe.targetSets, done.count)
-            var rows: [DraftSet] = []
-            for i in 0..<count {
-                if i < done.count {
-                    let s = done[i]
-                    rows.append(DraftSet(
-                        number: s.setNumber,
-                        weight: pe.exercise.isCardio ? "" : units.format(s.weight, withUnit: false),
-                        reps: pe.exercise.isCardio ? String((s.durationSec ?? 0) / 60) : String(s.reps),
-                        serverId: s.id))
-                } else if !previous.isEmpty {
-                    let p = previous[min(i, previous.count - 1)]
-                    rows.append(DraftSet(
-                        number: i + 1,
-                        weight: pe.exercise.isCardio ? "" : units.format(p.weight, withUnit: false),
-                        reps: pe.exercise.isCardio ? String((p.durationSec ?? 1200) / 60) : String(p.reps)))
-                } else {
-                    rows.append(DraftSet(number: i + 1, weight: "", reps: pe.exercise.isCardio ? "20" : ""))
-                }
-            }
-            drafts[pe.id] = rows
-        }
-    }
-
-    func previousLine(for pe: ProgramExercise) -> String? {
-        let prev = app.lastSets(for: pe.exercise.id, excluding: sessionId)
-        guard !prev.isEmpty else { return nil }
-        if pe.exercise.isCardio { return nil }
-        return "Last: " + prev.prefix(4).map { "\(app.units.format($0.weight, withUnit: false)) x \($0.reps)" }.joined(separator: ", ")
-    }
-
-    func addSet(to pe: ProgramExercise) {
-        var rows = drafts[pe.id] ?? []
-        let last = rows.last
-        rows.append(DraftSet(number: rows.count + 1, weight: last?.weight ?? "", reps: last?.reps ?? ""))
-        drafts[pe.id] = rows
-        Haptics.tap()
-    }
-
-    func toggle(_ pe: ProgramExercise, index: Int) async {
-        guard let sessionId, var rows = drafts[pe.id], rows.indices.contains(index) else { return }
-        var row = rows[index]
-        isBusy = true
-        defer { isBusy = false }
-
-        if let serverId = row.serverId {
-            do {
-                _ = try await api.raw("DELETE", "/api/sets/\(serverId)")
-                logged[serverId] = nil
-                row.serverId = nil
-                row.isPR = false
-                rows[index] = row
-                drafts[pe.id] = rows
-                Haptics.tap()
-            } catch { self.error = error.localizedDescription }
-            return
-        }
-
-        let isCardio = pe.exercise.isCardio
-        let weightValue = Double(row.weight.replacingOccurrences(of: ",", with: ".")) ?? 0
-        guard let repsValue = Int(row.reps.trimmingCharacters(in: .whitespaces)), repsValue > 0 else {
-            Haptics.warning()
-            error = isCardio ? "Enter the minutes first." : "Enter the reps first."
-            return
-        }
-        let kg = app.units.toKg(weightValue)
-        var body: [String: Any] = [
-            "exerciseId": pe.exercise.id,
-            "setNumber": row.number,
-            "weight": isCardio ? 0 : kg,
-            "reps": isCardio ? 1 : repsValue,
-        ]
-        if isCardio { body["durationSec"] = repsValue * 60 }
-
-        do {
-            let created: SetEntry = try await api.send("POST", "/api/sessions/\(sessionId)/sets", json: body)
-            row.serverId = created.id
-            logged[created.id] = created
-            if !isCardio { checkPR(pe, entry: created, row: &row) }
-            rows[index] = row
-            drafts[pe.id] = rows
-            Haptics.thud()
-            if Prefs.bool(Prefs.autoRest, default: true) { timer.start(seconds: pe.restSec) }
-        } catch {
-            self.error = error.localizedDescription
-            Haptics.warning()
-        }
-    }
-
-    private func checkPR(_ pe: ProgramExercise, entry: SetEntry, row: inout DraftSet) {
-        guard let e1 = entry.e1RM else { return }
-        let prior = app.bestE1RM(for: pe.exercise.id, excluding: sessionId)
-        let best = max(prior, sessionBest[pe.exercise.id] ?? 0)
-        sessionBest[pe.exercise.id] = max(best, e1)
-        if prior > 0 && e1 > best + 0.01 {
-            row.isPR = true
-            prBanner = "New PR on \(pe.exercise.name): \(app.units.format(entry.weight)) x \(entry.reps)"
-            if !prNames.contains(prLine(pe, entry)) { prNames.append(prLine(pe, entry)) }
-            confettiTick += 1
-            Haptics.success()
-            Task {
-                try? await Task.sleep(nanoseconds: 4_000_000_000)
-                prBanner = nil
-            }
-        }
-    }
-
-    func finish() async -> Bool {
-        guard let sessionId else { return false }
-        do {
-            _ = try await api.raw("PUT", "/api/sessions/\(sessionId)", json: ["finish": true])
-            timer.stop()
-            if Prefs.bool(Prefs.healthSync, default: false) {
-                await HealthKitManager.shared.saveWorkout(start: startedAt, end: Date())
-            }
-            await app.refresh()
-            return true
-        } catch {
-            self.error = error.localizedDescription
-            return false
-        }
-    }
-
-    private func prLine(_ pe: ProgramExercise, _ entry: SetEntry) -> String {
-        "\(pe.exercise.name): \(app.units.format(entry.weight)) x \(entry.reps)"
-    }
-
-    func makeSummary() -> WorkoutSummary {
-        let sets = Array(logged.values)
-        let exerciseIds = Set(sets.map(\.exerciseId))
-        return WorkoutSummary(
-            title: workout.name,
-            duration: Date().timeIntervalSince(startedAt),
-            sets: sets.count,
-            exercises: exerciseIds.count,
-            volumeKg: sets.reduce(0) { $0 + $1.volume },
-            prs: prNames)
-    }
-
-    func discard() async {
-        timer.stop()
-        if let sessionId { _ = try? await api.raw("DELETE", "/api/sessions/\(sessionId)") }
-        await app.refresh()
-    }
-}
-
 struct WorkoutSessionView: View {
     @Environment(AppState.self) private var app
     @Environment(RestTimer.self) private var timer
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     let workout: Workout
+    var sessionId: String? = nil
 
     @State private var model: SessionViewModel?
     @State private var showFinish = false
+    @State private var showDiscard = false
+    @State private var showTemplatePrompt = false
     @State private var showPlates = false
+    @State private var showNotes = false
+    @State private var showAddExercise = false
+    @State private var swapTarget: ProgramExercise?
     @State private var summary: WorkoutSummary?
+    @State private var finishing = false
 
     var body: some View {
         ZStack {
             AppBackground()
             if let model {
-                content(model)
+                if let failure = model.startFailure {
+                    failureView(failure)
+                } else {
+                    content(model)
+                }
             } else {
                 ProgressView()
             }
         }
         .task {
             guard model == nil else { return }
-            let m = SessionViewModel(workout: workout, app: app, timer: timer)
+            let m = SessionViewModel(workout: workout, sessionId: sessionId, app: app, timer: timer)
             model = m
             timer.requestPermission()
-            UIApplication.shared.isIdleTimerDisabled = Prefs.bool(Prefs.keepAwake, default: true)
             await m.start()
+            updateIdleTimer()
+            await app.reloadSessions()
         }
-        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
+        .onChange(of: model?.isPaused) { _, _ in updateIdleTimer() }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, let model else { return }
+            Task { await model.syncFromServer(); await model.flushPending() }
+        }
+        .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled = false
+            Task { await app.reloadSessions() }
+        }
+    }
+
+    private func updateIdleTimer() {
+        UIApplication.shared.isIdleTimerDisabled = Prefs.bool(Prefs.keepAwake, default: true) && !(model?.isPaused ?? false)
+    }
+
+    private func failureView(_ text: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 44)).foregroundStyle(Theme.amber)
+            Text(text).multilineTextAlignment(.center).padding(.horizontal, 30)
+            Button("Close") { Task { await app.refresh(); dismiss() } }
+                .buttonStyle(PrimaryButtonStyle()).padding(.horizontal, 60)
+        }
     }
 
     @ViewBuilder
@@ -244,18 +74,42 @@ struct WorkoutSessionView: View {
             } else {
                 ScrollView {
                     VStack(spacing: 14) {
-                        ForEach(model.exercises) { pe in
-                            ExerciseCard(model: model, pe: pe)
+                        if model.pendingCount > 0 {
+                            Label("\(model.pendingCount) set\(model.pendingCount == 1 ? "" : "s") waiting to sync", systemImage: "icloud.and.arrow.up")
+                                .font(.footnote.weight(.semibold)).foregroundStyle(Theme.amber)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                        if model.exercises.isEmpty {
+                            GlassCard {
+                                Text("This workout has no exercises. Add one to get going.").foregroundStyle(.secondary)
+                            }
+                        }
+                        ForEach(model.exercises) { pe in
+                            ExerciseCard(model: model, pe: pe, onSwap: { swapTarget = $0 })
+                        }
+                        Button { showAddExercise = true } label: {
+                            Label("Add exercise", systemImage: "plus")
+                                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [6, 5])))
+                        }
+                        .buttonStyle(.plain)
                     }
                     .padding(.horizontal, 16)
-                    .padding(.bottom, timer.isRunning ? 130 : 40)
+                    .padding(.bottom, timer.isRunning ? 140 : 50)
                 }
                 .scrollDismissesKeyboard(.interactively)
             }
         }
         .overlay(alignment: .bottom) {
-            if timer.isRunning { RestTimerBar().padding(.horizontal, 16).padding(.bottom, 10).transition(.move(edge: .bottom).combined(with: .opacity)) }
+            VStack(spacing: 10) {
+                if let toast = model.toast { ToastView(toast: toast).transition(.move(edge: .bottom).combined(with: .opacity)) }
+                if timer.isRunning && !model.isPaused {
+                    RestTimerBar().transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .padding(.horizontal, 16).padding(.bottom, 10)
         }
         .overlay(alignment: .top) {
             if let banner = model.prBanner {
@@ -269,57 +123,189 @@ struct WorkoutSessionView: View {
             }
         }
         .overlay { ConfettiView(trigger: model.confettiTick).allowsHitTesting(false) }
+        .overlay {
+            if model.isPaused && !model.isStarting {
+                PausedOverlay(model: model, onFinish: { showFinish = true }, onDiscard: { showDiscard = true })
+                    .transition(.opacity)
+            }
+        }
         .animation(.spring(response: 0.4), value: timer.isRunning)
         .animation(.spring(response: 0.4), value: model.prBanner)
+        .animation(.spring(response: 0.35), value: model.toast?.id)
+        .animation(.easeInOut(duration: 0.25), value: model.isPaused)
         .alert("Something went wrong", isPresented: Binding(get: { model.error != nil }, set: { if !$0 { model.error = nil } })) {
             Button("OK", role: .cancel) {}
         } message: { Text(model.error ?? "") }
         .confirmationDialog("Finish workout?", isPresented: $showFinish, titleVisibility: .visible) {
-            Button("Finish and save") {
-                Task { if await model.finish() { summary = model.makeSummary() } }
+            if model.workingSets > 0 {
+                Button("Finish and save") { beginFinish(model) }
             }
-            Button("Discard workout", role: .destructive) {
-                Task { await model.discard(); dismiss() }
-            }
+            Button("Discard workout", role: .destructive) { showDiscard = true }
             Button("Keep training", role: .cancel) {}
         } message: {
-            Text("\(model.completedSets) sets logged")
+            Text(finishMessage(model))
+        }
+        .confirmationDialog("Update this workout?", isPresented: $showTemplatePrompt, titleVisibility: .visible) {
+            Button("Update the saved workout") { performFinish(model, updateTemplate: true) }
+            Button("Only for today") { performFinish(model, updateTemplate: false) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("You added or removed exercises. Save those changes to the workout in your program so next time matches?")
+        }
+        .alert("Discard this workout?", isPresented: $showDiscard) {
+            Button("Discard", role: .destructive) { Task { await model.discard(); dismiss() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(model.completedSets > 0 ? "The \(model.completedSets) logged set\(model.completedSets == 1 ? "" : "s") will be deleted. This cannot be undone." : "Nothing has been logged yet.")
         }
         .sheet(item: $summary, onDismiss: { dismiss() }) { WorkoutSummaryView(summary: $0) }
         .sheet(isPresented: $showPlates) { PlateCalculatorView().presentationDetents([.medium, .large]) }
+        .sheet(isPresented: $showNotes) { WorkoutNotesSheet(model: model) }
+        .sheet(isPresented: $showAddExercise) {
+            ExercisePickerSheet(excluding: Set(model.exercises.map(\.exercise.id)), title: "Add exercise") { model.addExercise($0) }
+        }
+        .sheet(item: $swapTarget) { target in
+            ExercisePickerSheet(excluding: Set(model.exercises.map(\.exercise.id)), title: "Swap \(target.exercise.name)",
+                                suggestMuscle: target.exercise.muscleGroup) { model.swap(target, with: $0) }
+        }
+    }
+
+    private func finishMessage(_ model: SessionViewModel) -> String {
+        if model.workingSets == 0 { return "No sets are logged yet, so there is nothing to save." }
+        var text = "\(model.workingSets) working set\(model.workingSets == 1 ? "" : "s") logged."
+        if model.plannedUnlogged > 0 { text += " \(model.plannedUnlogged) planned set\(model.plannedUnlogged == 1 ? " was" : "s were") not logged." }
+        return text
+    }
+
+    private func beginFinish(_ model: SessionViewModel) {
+        if model.hasStructuralChanges { showTemplatePrompt = true } else { performFinish(model, updateTemplate: false) }
+    }
+
+    private func performFinish(_ model: SessionViewModel, updateTemplate: Bool) {
+        guard !finishing else { return }
+        finishing = true
+        Task {
+            if await model.finish(updateTemplate: updateTemplate) { summary = model.makeSummary() }
+            finishing = false
+        }
     }
 
     private func header(_ model: SessionViewModel) -> some View {
-        HStack {
-            Button { Task { dismiss() } } label: {
+        HStack(spacing: 10) {
+            Button { dismiss() } label: {
                 Image(systemName: "chevron.down").font(.headline).padding(10)
-                    .background(.ultraThinMaterial, in: Circle())
+                    .background(Theme.card, in: Circle())
             }
+            .accessibilityLabel("Minimize workout")
             VStack(alignment: .leading, spacing: 0) {
-                Text(workout.name).font(.system(.title3, design: .rounded, weight: .bold))
+                Text(workout.name).font(.system(.title3, design: .rounded, weight: .bold)).lineLimit(1)
                 TimelineView(.periodic(from: .now, by: 1)) { context in
-                    Text(elapsed(from: model.startedAt, to: context.date))
-                        .font(.footnote.monospacedDigit()).foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        Text(formatClock(model.clock.activeSeconds(at: context.date)))
+                            .font(.footnote.monospacedDigit()).foregroundStyle(.secondary)
+                        if model.isPaused {
+                            Text("PAUSED").font(.system(size: 10, weight: .heavy)).foregroundStyle(.black)
+                                .padding(.horizontal, 6).padding(.vertical, 2).background(Theme.amber, in: Capsule())
+                        }
+                    }
                 }
             }
-            Spacer()
-            Button { showPlates = true } label: {
-                Image(systemName: "circle.grid.2x2.fill").padding(10).background(.ultraThinMaterial, in: Circle())
+            Spacer(minLength: 4)
+            Button { Task { model.isPaused ? await model.resume() : await model.pause() } } label: {
+                Image(systemName: model.isPaused ? "play.fill" : "pause.fill").font(.headline).padding(10)
+                    .background(Theme.card, in: Circle())
             }
+            .accessibilityLabel(model.isPaused ? "Resume workout" : "Pause workout")
+            Menu {
+                Button { showAddExercise = true } label: { Label("Add exercise", systemImage: "plus") }
+                Button { showNotes = true } label: { Label("Workout notes", systemImage: "note.text") }
+                Button { showPlates = true } label: { Label("Plate calculator", systemImage: "circle.grid.2x2") }
+                Divider()
+                Button(role: .destructive) { showDiscard = true } label: { Label("Discard workout", systemImage: "trash") }
+            } label: {
+                Image(systemName: "ellipsis").font(.headline).padding(10).background(Theme.card, in: Circle())
+            }
+            .accessibilityLabel("More")
             Button { showFinish = true } label: {
                 Text("Finish").font(.system(.subheadline, design: .rounded, weight: .bold))
-                    .padding(.horizontal, 16).padding(.vertical, 10)
+                    .padding(.horizontal, 14).padding(.vertical, 10)
                     .background(Theme.accent, in: Capsule())
             }
             .foregroundStyle(.white)
+            .disabled(finishing)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
     }
+}
 
-    private func elapsed(from start: Date, to now: Date) -> String {
-        let s = max(0, Int(now.timeIntervalSince(start)))
-        return String(format: "%d:%02d:%02d", s / 3600, (s % 3600) / 60, s % 60)
+struct ToastView: View {
+    let toast: Toast
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(toast.text).font(.subheadline).foregroundStyle(.white)
+            if let title = toast.actionTitle, let action = toast.action {
+                Spacer(minLength: 4)
+                Button(title) { action() }.font(.subheadline.weight(.bold)).foregroundStyle(Theme.accent)
+            }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(white: 0.18), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .shadow(color: .black.opacity(0.4), radius: 10, y: 4)
+    }
+}
+
+/// Covers the workout while it is paused. Nothing underneath can be tapped.
+struct PausedOverlay: View {
+    let model: SessionViewModel
+    var onFinish: () -> Void
+    var onDiscard: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.82).ignoresSafeArea()
+            VStack(spacing: 18) {
+                Image(systemName: "pause.circle.fill").font(.system(size: 64)).foregroundStyle(Theme.amber)
+                Text("Workout paused").font(.system(.title2, design: .rounded, weight: .heavy))
+                Text(formatClock(model.clock.activeSeconds(at: Date())))
+                    .font(.system(size: 40, weight: .bold, design: .rounded).monospacedDigit())
+                Text("The clock and your rest timer are stopped.").font(.footnote).foregroundStyle(.secondary)
+                Button { Task { await model.resume() } } label: { Label("Resume", systemImage: "play.fill") }
+                    .buttonStyle(PrimaryButtonStyle()).padding(.top, 8)
+                Button("Finish workout", action: onFinish).font(.headline).foregroundStyle(.white)
+                Button("Discard workout", role: .destructive, action: onDiscard).font(.subheadline)
+            }
+            .padding(30)
+        }
+    }
+}
+
+struct WorkoutNotesSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let model: SessionViewModel
+    @State private var text = ""
+
+    var body: some View {
+        NavigationStack {
+            TextEditor(text: $text)
+                .scrollContentBackground(.hidden)
+                .padding(12)
+                .background(Theme.field, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .padding(16)
+                .background(Theme.background)
+                .navigationTitle("Workout notes")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") { Task { await model.saveNotes(text); dismiss() } }
+                    }
+                }
+                .onAppear { text = model.notes }
+        }
+        .presentationDetents([.medium])
     }
 }
 
@@ -327,11 +313,17 @@ struct ExerciseCard: View {
     @Environment(AppState.self) private var app
     let model: SessionViewModel
     let pe: ProgramExercise
+    var onSwap: (ProgramExercise) -> Void
     @State private var showWarmup = false
+    @State private var showRemove = false
+    @State private var editing: DraftSet?
 
     var body: some View {
         let rows = model.drafts[pe.id] ?? []
         let isCardio = pe.exercise.isCardio
+        let hasSets = model.hasLoggedSets(pe)
+        let order = model.exercises.map(\.id)
+        let position = order.firstIndex(of: pe.id) ?? 0
         GlassCard {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top) {
@@ -341,17 +333,25 @@ struct ExerciseCard: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    if !isCardio {
-                        Button { showWarmup = true } label: {
-                            Image(systemName: "flame").font(.footnote.weight(.semibold))
-                                .padding(7).background(Theme.field, in: Circle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    Text("\(rows.filter { $0.serverId != nil }.count)/\(rows.count)")
+                    Text("\(rows.filter { ($0.isLogged || $0.isPending) && !$0.isWarmup }.count)/\(max(pe.targetSets, 1))")
                         .font(.caption.monospacedDigit().weight(.semibold))
                         .padding(.horizontal, 8).padding(.vertical, 4)
                         .background(Color.white.opacity(0.08), in: Capsule())
+                    Menu {
+                        if !isCardio { Button { showWarmup = true } label: { Label("Warm-up ramp", systemImage: "flame") } }
+                        Button { onSwap(pe) } label: { Label("Swap exercise", systemImage: "arrow.triangle.2.circlepath") }
+                            .disabled(hasSets)
+                        Button { model.move(pe, up: true) } label: { Label("Move up", systemImage: "arrow.up") }
+                            .disabled(position == 0)
+                        Button { model.move(pe, up: false) } label: { Label("Move down", systemImage: "arrow.down") }
+                            .disabled(position >= order.count - 1)
+                        Divider()
+                        Button(role: .destructive) { showRemove = true } label: { Label("Remove from workout", systemImage: "trash") }
+                    } label: {
+                        Image(systemName: "ellipsis").font(.footnote.weight(.bold)).frame(width: 30, height: 30)
+                            .background(Theme.field, in: Circle())
+                    }
+                    .accessibilityLabel("Exercise options")
                 }
                 if let line = model.previousLine(for: pe) {
                     Text(line).font(.caption).foregroundStyle(Theme.mint)
@@ -374,7 +374,7 @@ struct ExerciseCard: View {
                 .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
 
                 ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                    SetRow(model: model, pe: pe, index: index, row: row)
+                    SetRow(model: model, pe: pe, index: index, row: row, onEdit: { editing = $0 })
                 }
 
                 Button {
@@ -387,8 +387,19 @@ struct ExerciseCard: View {
         }
         .sheet(isPresented: $showWarmup) {
             WarmupSheet(exercise: pe.exercise,
-                        workingWeight: Double((model.drafts[pe.id]?.first?.weight ?? "").replacingOccurrences(of: ",", with: ".")) ?? 0)
+                        workingWeight: Double((rows.first { !$0.isWarmup }?.weight ?? "").replacingOccurrences(of: ",", with: ".")) ?? 0)
                 .presentationDetents([.medium])
+        }
+        .sheet(item: $editing) { row in SetEditSheet(model: model, pe: pe, rowId: row.id) }
+        .confirmationDialog("Remove \(pe.exercise.name)?", isPresented: $showRemove, titleVisibility: .visible) {
+            if hasSets {
+                Button("Delete its sets and remove", role: .destructive) { Task { await model.remove(pe, deleteSets: true) } }
+            } else {
+                Button("Remove from this workout", role: .destructive) { Task { await model.remove(pe, deleteSets: false) } }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(hasSets ? "This exercise has logged sets. They will be deleted." : "It only changes today's workout unless you save the change when you finish.")
         }
     }
 }
@@ -398,38 +409,68 @@ struct SetRow: View {
     let pe: ProgramExercise
     let index: Int
     let row: DraftSet
+    var onEdit: (DraftSet) -> Void
 
     var body: some View {
-        let done = row.serverId != nil
+        let done = row.isLogged
         let isCardio = pe.exercise.isCardio
+        let locked = done || row.isPending
         HStack(spacing: 8) {
-            Text("\(row.number)").font(.subheadline.monospacedDigit().weight(.bold))
-                .frame(width: 34, alignment: .leading)
-                .foregroundStyle(done ? Theme.mint : .secondary)
+            Button {
+                if row.isPending { model.showToast("Waiting to sync. You can edit it once it is saved.") } else { onEdit(row) }
+            } label: {
+                Text(row.isWarmup ? "W" : row.isDropSet ? "D" : "\(index + 1)")
+                    .font(.subheadline.monospacedDigit().weight(.bold))
+                    .frame(width: 34, alignment: .leading)
+                    .foregroundStyle(row.isWarmup || row.isDropSet ? Theme.amber : (done ? Theme.mint : .secondary))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Set \(index + 1). Edit details")
             if isCardio {
                 Spacer().frame(maxWidth: .infinity)
             } else {
-                numberField("0", text: binding(\.weight), keyboard: .decimalPad)
+                numberField("0", text: binding(\.weight), keyboard: .decimalPad, locked: locked)
             }
-            numberField("0", text: binding(\.reps), keyboard: .numberPad)
+            numberField("0", text: binding(\.reps), keyboard: .numberPad, locked: locked)
             Button {
                 Task { await model.toggle(pe, index: index) }
             } label: {
-                Image(systemName: row.isPR ? "trophy.fill" : "checkmark")
-                    .font(.headline)
-                    .frame(width: 44, height: 40)
-                    .foregroundStyle(done ? .white : .secondary)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(done ? AnyShapeStyle(row.isPR ? Theme.amber : Theme.mint) : AnyShapeStyle(Color.white.opacity(0.08)))
-                    )
+                ZStack {
+                    if row.isSaving {
+                        ProgressView().tint(.white)
+                    } else if row.isPending {
+                        Image(systemName: "icloud.and.arrow.up").font(.headline)
+                    } else {
+                        Image(systemName: row.isPR ? "trophy.fill" : "checkmark").font(.headline)
+                    }
+                }
+                .frame(width: 44, height: 40)
+                .foregroundStyle(done || row.isPending ? .white : .secondary)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(done ? AnyShapeStyle(row.isPR ? Theme.amber : Theme.mint)
+                              : row.isPending ? AnyShapeStyle(Theme.amber.opacity(0.7)) : AnyShapeStyle(Color.white.opacity(0.08)))
+                )
             }
-            .disabled(model.isBusy)
+            .disabled(row.isSaving)
+            .accessibilityLabel(done ? "Set logged. Tap to unlog" : "Log set")
         }
         .opacity(done ? 0.85 : 1)
+        .contextMenu {
+            Button { if !row.isPending { onEdit(row) } } label: { Label("Edit details", systemImage: "pencil") }
+            Button { Task { await model.setFlag(pe, rowId: row.id, warmup: !row.isWarmup) } } label: {
+                Label(row.isWarmup ? "Mark as working set" : "Mark as warm-up", systemImage: "flame")
+            }
+            Button { Task { await model.setFlag(pe, rowId: row.id, drop: !row.isDropSet) } } label: {
+                Label(row.isDropSet ? "Not a drop set" : "Mark as drop set", systemImage: "arrow.down.right")
+            }
+            Button { model.duplicateRow(pe, rowId: row.id) } label: { Label("Duplicate set", systemImage: "plus.square.on.square") }
+            Divider()
+            Button(role: .destructive) { Task { await model.deleteRow(pe, rowId: row.id) } } label: { Label("Delete set", systemImage: "trash") }
+        }
     }
 
-    private func numberField(_ placeholder: String, text: Binding<String>, keyboard: UIKeyboardType) -> some View {
+    private func numberField(_ placeholder: String, text: Binding<String>, keyboard: UIKeyboardType, locked: Bool) -> some View {
         TextField(placeholder, text: text)
             .keyboardType(keyboard)
             .multilineTextAlignment(.center)
@@ -437,16 +478,100 @@ struct SetRow: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 9)
             .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .disabled(row.serverId != nil)
+            .disabled(locked)
     }
 
     private func binding(_ keyPath: WritableKeyPath<DraftSet, String>) -> Binding<String> {
         Binding(
-            get: { model.drafts[pe.id]?[safe: index]?[keyPath: keyPath] ?? "" },
+            get: { model.drafts[pe.id]?.first(where: { $0.id == row.id })?[keyPath: keyPath] ?? "" },
             set: { newValue in
-                guard model.drafts[pe.id]?.indices.contains(index) == true else { return }
-                model.drafts[pe.id]?[index][keyPath: keyPath] = newValue
+                guard let i = model.drafts[pe.id]?.firstIndex(where: { $0.id == row.id }) else { return }
+                model.drafts[pe.id]?[i][keyPath: keyPath] = newValue
             })
+    }
+}
+
+/// Edits one set: values, effort, warm-up and drop-set flags, and a note.
+struct SetEditSheet: View {
+    @Environment(AppState.self) private var app
+    @Environment(\.dismiss) private var dismiss
+    let model: SessionViewModel
+    let pe: ProgramExercise
+    let rowId: UUID
+
+    @State private var weight = ""
+    @State private var reps = ""
+    @State private var rir: Int?
+    @State private var warmup = false
+    @State private var drop = false
+    @State private var note = ""
+    @State private var loaded = false
+
+    var body: some View {
+        let cardio = pe.exercise.isCardio
+        NavigationStack {
+            Form {
+                Section {
+                    if !cardio {
+                        HStack {
+                            Text("\(pe.exercise.weightColumnTitle.capitalized) (\(app.units.label))")
+                            Spacer()
+                            TextField("0", text: $weight).keyboardType(.decimalPad).multilineTextAlignment(.trailing).frame(width: 90)
+                        }
+                    }
+                    HStack {
+                        Text(cardio ? "Minutes" : "Reps")
+                        Spacer()
+                        TextField("0", text: $reps).keyboardType(.numberPad).multilineTextAlignment(.trailing).frame(width: 90)
+                    }
+                }
+                if !cardio {
+                    Section("Reps in reserve") {
+                        Picker("RIR", selection: $rir) {
+                            Text("-").tag(Int?.none)
+                            ForEach(0...5, id: \.self) { Text("\($0)").tag(Int?.some($0)) }
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                    Section {
+                        Toggle("Warm-up set", isOn: $warmup)
+                        Toggle("Drop set", isOn: $drop)
+                    } footer: {
+                        Text("Warm-up sets do not count toward volume, records or goals.")
+                    }
+                }
+                Section("Note") {
+                    TextField("How did it feel?", text: $note, axis: .vertical).lineLimit(1...4)
+                }
+                Section {
+                    Button("Delete set", role: .destructive) {
+                        Task { await model.deleteRow(pe, rowId: rowId); dismiss() }
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Theme.background)
+            .navigationTitle(pe.exercise.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        Task {
+                            await model.saveEdit(pe, rowId: rowId, weight: weight, reps: reps, rir: rir,
+                                                 warmup: warmup, drop: drop, note: note)
+                            dismiss()
+                        }
+                    }
+                }
+            }
+            .onAppear {
+                guard !loaded, let r = model.drafts[pe.id]?.first(where: { $0.id == rowId }) else { return }
+                weight = r.weight; reps = r.reps; rir = r.rir; warmup = r.isWarmup; drop = r.isDropSet; note = r.note
+                loaded = true
+            }
+        }
+        .presentationDetents([.large])
     }
 }
 

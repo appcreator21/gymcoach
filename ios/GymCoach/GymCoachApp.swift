@@ -55,5 +55,42 @@ struct MainTabs: View {
         .toolbarBackground(Theme.background, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
         .onChange(of: tab) { _, _ in Haptics.select() }
+        .overlay(alignment: .bottom) {
+            if let open = app.activeSession, app.sessionLaunch == nil, !app.isAbandoned(open) {
+                ActiveWorkoutBar(session: open)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 58)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.4), value: app.activeSession?.id)
+        .fullScreenCover(item: Binding(get: { app.sessionLaunch }, set: { app.sessionLaunch = $0 })) { launch in
+            WorkoutSessionView(workout: launch.workout, sessionId: launch.sessionId)
+        }
+        .confirmationDialog(
+            "A workout is already open",
+            isPresented: Binding(get: { app.startConflict != nil }, set: { if !$0 { app.startConflict = nil } }),
+            titleVisibility: .visible,
+            presenting: app.startConflict
+        ) { conflict in
+            Button("Resume \(conflict.open.title)") { app.resolve(conflict, .resumeOpen) }
+            Button("Finish it and start \(conflict.wanted.name)") { app.resolve(conflict, .finishOpenThenStart) }
+            Button("Discard it and start \(conflict.wanted.name)", role: .destructive) { app.resolve(conflict, .discardOpenThenStart) }
+            Button("Cancel", role: .cancel) {}
+        } message: { conflict in
+            Text("\(conflict.open.title) is still in progress with \(conflict.open.setCount) set\(conflict.open.setCount == 1 ? "" : "s") logged.")
+        }
+        .confirmationDialog(
+            "This workout cannot be reopened",
+            isPresented: Binding(get: { app.orphanSession != nil }, set: { if !$0 { app.orphanSession = nil } }),
+            titleVisibility: .visible,
+            presenting: app.orphanSession
+        ) { orphan in
+            Button("Finish and keep its sets") { Task { await app.finishSession(orphan) } }
+            Button("Discard it", role: .destructive) { Task { await app.discardSession(orphan) } }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("The workout it came from was deleted from your program.")
+        }
     }
 }

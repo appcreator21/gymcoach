@@ -116,3 +116,17 @@ describe('validateSetForCategory', () => {
     expect(validateSetForCategory('CARDIO', { durationSec: 750, distanceM: 2500 })).toBeNull();
   });
 });
+
+describe('setUpdateSchema extras', () => {
+  it('accepts warm-up, drop-set and note changes', () => {
+    const r = setUpdateSchema.parse({ weight: 60, reps: 10, rir: 2, isWarmup: true, isDropSet: false, notes: ' felt easy ' });
+    expect(r.isWarmup).toBe(true);
+    expect(r.notes).toBe('felt easy');
+  });
+
+  it('leaves the extras undefined when absent', () => {
+    const r = setUpdateSchema.parse({ weight: 60, reps: 10, rir: null });
+    expect(r.isWarmup).toBeUndefined();
+    expect(r.notes).toBeUndefined();
+  });
+});

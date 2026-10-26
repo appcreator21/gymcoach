@@ -24,3 +24,18 @@ describe('sessionUpdateSchema', () => {
     expect(sessionUpdateSchema.safeParse({ notes: 'x'.repeat(2001) }).success).toBe(false);
   });
 });
+
+describe('sessionUpdateSchema actions', () => {
+  it('accepts a single action', () => {
+    expect(sessionUpdateSchema.safeParse({ pause: true }).success).toBe(true);
+    expect(sessionUpdateSchema.safeParse({ reopen: true, notes: 'x' }).success).toBe(true);
+  });
+
+  it('rejects two actions in one request', () => {
+    expect(sessionUpdateSchema.safeParse({ pause: true, finish: true }).success).toBe(false);
+  });
+
+  it('treats false flags as no action', () => {
+    expect(sessionUpdateSchema.safeParse({ pause: false, finish: false }).success).toBe(true);
+  });
+});

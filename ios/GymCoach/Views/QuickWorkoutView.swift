@@ -10,7 +10,6 @@ struct QuickWorkoutView: View {
     @State private var intensity = "NORMAL"
     @State private var building = false
     @State private var workout: Workout?
-    @State private var running: Workout?
     @State private var error: String?
 
     private let focuses: [(String, String)] = [
@@ -84,7 +83,7 @@ struct QuickWorkoutView: View {
                             }
                         }
                     }
-                    Button { running = workout; Haptics.thud() } label: { Label("Start workout", systemImage: "play.fill") }
+                    Button { app.requestStart(workout) } label: { Label("Start workout", systemImage: "play.fill") }
                         .buttonStyle(PrimaryButtonStyle())
                 }
             }
@@ -94,7 +93,6 @@ struct QuickWorkoutView: View {
         .background(Theme.background)
         .navigationTitle("Quick workout")
         .navigationBarTitleDisplayMode(.inline)
-        .fullScreenCover(item: $running, onDismiss: { workout = nil }) { WorkoutSessionView(workout: $0) }
     }
 
     private func build() async {

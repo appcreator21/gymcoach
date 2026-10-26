@@ -58,6 +58,17 @@ export const setUpdateSchema = setInputSchema.pick({
   reps: true,
 }).extend({
   rir: z.union([z.null(), z.coerce.number().int().min(0).max(5)]),
+  // Optional extras: absent leaves the stored value alone.
+  isWarmup: z.boolean().optional(),
+  isDropSet: z.boolean().optional(),
+  notes: z.string().trim().max(500).nullable().optional(),
+});
+
+// Cardio sets are edited by duration (and note) only.
+export const cardioSetUpdateSchema = z.object({
+  durationSec: z.coerce.number().int().min(1).max(MAX_DURATION_SEC),
+  distanceM: z.union([z.coerce.number().min(0).max(MAX_DISTANCE_M), z.null()]).optional(),
+  notes: z.string().trim().max(500).nullable().optional(),
 });
 
 export type SetUpdateInput = z.infer<typeof setUpdateSchema>;

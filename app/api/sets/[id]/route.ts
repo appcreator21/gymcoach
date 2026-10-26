@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import type { Prisma } from '@/lib/prisma-client';
-import { ApiError, handleApiError, parseJsonBody, requireApiUserId } from '@/lib/api';
+import { ApiError, handleApiError, requireApiUserId } from '@/lib/api';
 import { findAchievingSet } from '@/lib/goals';
-import { setUpdateSchema } from '@/lib/schemas/set';
+import { cardioSetUpdateSchema, setUpdateSchema } from '@/lib/schemas/set';
 import { effectiveWeight } from '@/lib/stats';
 
 interface Params {
@@ -15,7 +15,14 @@ export async function PATCH(req: Request, props: Params) {
   const params = await props.params;
   try {
     const userId = await requireApiUserId();
-    const data = await parseJsonBody(req, setUpdateSchema);
+    // The accepted fields depend on the exercise (strength or cardio), which
+    // is only known once the set is loaded, so the body is validated below.
+    let raw: unknown;
+    try {
+      raw = await req.json();
+    } catch {
+      throw new ApiError(400, 'Invalid JSON');
+    }
 
     const updated = await runSerializableSetTransaction(async (tx) => {
       // Serialize same-set mutations first, then serialize goal re-derivation
@@ -36,13 +43,37 @@ export async function PATCH(req: Request, props: Params) {
         throw new ApiError(400, 'Session already finished.');
       }
       if (set.exercise.category === 'CARDIO') {
-        throw new ApiError(400, 'Cardio sets cannot be edited with strength fields.');
+        const cardio = cardioSetUpdateSchema.safeParse(raw);
+        if (!cardio.success) {
+          throw new ApiError(400, cardio.error.issues[0]?.message ?? 'Invalid data');
+        }
+        return tx.set.update({
+          where: { id: set.id, session: { userId } },
+          data: {
+            durationSec: cardio.data.durationSec,
+            ...(cardio.data.distanceM !== undefined ? { distanceM: cardio.data.distanceM } : {}),
+            ...(cardio.data.notes !== undefined ? { notes: cardio.data.notes || null } : {}),
+          },
+        });
       }
+
+      const parsed = setUpdateSchema.safeParse(raw);
+      if (!parsed.success) {
+        throw new ApiError(400, parsed.error.issues[0]?.message ?? 'Invalid data');
+      }
+      const data = parsed.data;
 
       await lockExerciseGoal(tx, userId, set.exerciseId);
       const row = await tx.set.update({
         where: { id: set.id, session: { userId } },
-        data: { weight: data.weight, reps: data.reps, rir: data.rir },
+        data: {
+          weight: data.weight,
+          reps: data.reps,
+          rir: data.rir,
+          ...(data.isWarmup !== undefined ? { isWarmup: data.isWarmup } : {}),
+          ...(data.isDropSet !== undefined ? { isDropSet: data.isDropSet } : {}),
+          ...(data.notes !== undefined ? { notes: data.notes || null } : {}),
+        },
       });
       await rederiveGoalAchievement(tx, userId, set.exerciseId, true);
       return row;

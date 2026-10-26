@@ -46,6 +46,8 @@ struct ProgramExercise: Codable, Identifiable, Hashable {
     let restSec: Int
     let notes: String?
     let exercise: Exercise
+    var tempo: String? = nil
+    var supersetGroup: Int? = nil
 
     var repRange: String {
         targetRepsMin == targetRepsMax ? "\(targetRepsMin)" : "\(targetRepsMin)-\(targetRepsMax)"
@@ -89,10 +91,16 @@ struct SessionSummary: Codable, Identifiable, Hashable {
     let workout: NamedRef?
     let program: NamedRef?
     let _count: CountRef?
+    var pausedAt: Date? = nil
+    var pausedSec: Int? = nil
 
     var title: String { workout?.name ?? "Workout" }
     var setCount: Int { _count?.sets ?? 0 }
-    var duration: TimeInterval? { finishedAt.map { $0.timeIntervalSince(startedAt) } }
+    var clock: SessionClock { SessionClock(startedAt: startedAt, finishedAt: finishedAt, pausedAt: pausedAt, pausedSec: pausedSec ?? 0) }
+    /// Training time, without pauses. Nil while the workout is still open.
+    var duration: TimeInterval? { finishedAt == nil ? nil : TimeInterval(clock.activeSeconds(at: finishedAt ?? Date())) }
+    var isOpen: Bool { finishedAt == nil }
+    var isPaused: Bool { clock.isPaused }
 }
 
 struct SetEntry: Codable, Identifiable, Hashable {
@@ -106,6 +114,8 @@ struct SetEntry: Codable, Identifiable, Hashable {
     let durationSec: Int?
     let distanceM: Double?
     let completedAt: Date
+    var isDropSet: Bool? = nil
+    var notes: String? = nil
 
     /// Epley estimate of a one-rep max, in kg. Warmups and cardio return nil.
     var e1RM: Double? {
@@ -122,6 +132,10 @@ struct SessionDetail: Codable, Identifiable, Hashable {
     let notes: String?
     let workout: Workout?
     let sets: [SetEntry]
+    var pausedAt: Date? = nil
+    var pausedSec: Int? = nil
+
+    var clock: SessionClock { SessionClock(startedAt: startedAt, finishedAt: finishedAt, pausedAt: pausedAt, pausedSec: pausedSec ?? 0) }
 }
 
 struct BodyweightEntry: Codable, Identifiable, Hashable {
@@ -160,6 +174,8 @@ struct ChatHistory: Codable { let messages: [ChatMessage] }
 struct StartedSession: Codable {
     let id: String
     let startedAt: Date
+    var pausedAt: Date? = nil
+    var pausedSec: Int? = nil
 }
 
 struct ChartPoint: Identifiable {

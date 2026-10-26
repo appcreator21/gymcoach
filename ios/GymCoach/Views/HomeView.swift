@@ -2,7 +2,6 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(AppState.self) private var app
-    @State private var activeWorkout: Workout?
     @State private var showNext = false
 
     private var greeting: String {
@@ -36,9 +35,6 @@ struct HomeView: View {
             .overlay {
                 if app.isLoading && app.program == nil { ProgressView() }
             }
-        }
-        .fullScreenCover(item: $activeWorkout) { workout in
-            WorkoutSessionView(workout: workout)
         }
     }
 
@@ -201,8 +197,7 @@ struct HomeView: View {
                     Text("+\((workout.exercises ?? []).count - 5) more").font(.footnote).foregroundStyle(.secondary)
                 }
                 Button(resuming ? "Resume workout" : "Start workout") {
-                    Haptics.thud()
-                    activeWorkout = workout
+                    app.requestStart(workout)
                 }
                 .buttonStyle(PrimaryButtonStyle())
             }

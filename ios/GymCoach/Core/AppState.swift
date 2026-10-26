@@ -23,6 +23,11 @@ final class AppState {
     var isLoading = false
     var loadError: String?
 
+    // Workout in progress, presented once for the whole app (see AppState+Sessions).
+    var sessionLaunch: SessionLaunch?
+    var startConflict: StartConflict?
+    var orphanSession: SessionSummary?
+
     @ObservationIgnored private let api = APIClient.shared
 
     var units: Units { Units(isPounds: profile?.unit == "LB") }
