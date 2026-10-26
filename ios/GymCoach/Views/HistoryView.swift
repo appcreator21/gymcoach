@@ -27,6 +27,7 @@ struct HistoryView: View {
                             ForEach(sessions) { s in
                                 NavigationLink { SessionDetailView(summary: s) } label: { SessionRow(summary: s) }
                                     .buttonStyle(.plain)
+                                    .sessionActions(s)
                             }
                         }
                     }
@@ -83,35 +84,54 @@ struct ConsistencyHeatmap: View {
 
 struct SessionDetailView: View {
     @Environment(AppState.self) private var app
+    @Environment(\.dismiss) private var dismiss
     let summary: SessionSummary
     @State private var detail: SessionDetail?
     @State private var failed = false
+    @State private var actions = SessionActionState()
+
+    private var current: SessionSummary { app.sessions.first { $0.id == summary.id } ?? summary }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 if let detail {
-                    let volume = detail.sets.reduce(0) { $0 + $1.volume }
+                    let working = detail.sets.filter { !$0.isWarmup }
                     HStack(spacing: 12) {
-                        StatTile(value: "\(detail.sets.count)", label: "Sets", icon: "list.number")
-                        StatTile(value: app.units.formatVolume(volume), label: "Volume", icon: "scalemass.fill", tint: Theme.mint)
-                        StatTile(value: summary.duration.map(formatDuration) ?? "-", label: "Time", icon: "clock.fill", tint: Theme.amber)
+                        StatTile(value: "\(working.count)", label: "Sets", icon: "list.number")
+                        StatTile(value: app.units.formatVolume(working.reduce(0) { $0 + $1.volume }), label: "Volume", icon: "scalemass.fill", tint: Theme.mint)
+                        StatTile(value: current.duration.map(formatDuration) ?? "-", label: "Time", icon: "clock.fill", tint: Theme.amber)
+                    }
+                    if let note = detail.notes, !note.isEmpty {
+                        GlassCard {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Label("Notes", systemImage: "note.text").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                                Text(note).font(.subheadline)
+                            }
+                        }
+                    }
+                    if detail.sets.isEmpty {
+                        GlassCard { Text("No sets were logged in this workout.").foregroundStyle(.secondary) }
                     }
                     ForEach(exerciseGroups(detail), id: \.0.id) { exercise, sets in
                         GlassCard {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(exercise.name).font(.system(.headline, design: .rounded))
                                 ForEach(sets) { s in
-                                    HStack {
-                                        Text("Set \(s.setNumber)").foregroundStyle(.secondary)
-                                        Spacer()
-                                        if let sec = s.durationSec {
-                                            Text("\(sec / 60) min")
-                                        } else {
-                                            Text("\(app.units.format(s.weight)) x \(s.reps)")
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        HStack {
+                                            Text(s.isWarmup ? "Warm-up" : "Set \(s.setNumber)\(s.isDropSet == true ? "  (drop)" : "")")
+                                                .foregroundStyle(s.isWarmup ? Theme.amber : .secondary)
+                                            Spacer()
+                                            if let sec = s.durationSec {
+                                                Text("\(sec / 60) min")
+                                            } else {
+                                                Text("\(app.units.format(s.weight)) x \(s.reps)" + (s.rir.map { "  @\($0) RIR" } ?? ""))
+                                            }
                                         }
+                                        .font(.subheadline.monospacedDigit())
+                                        if let n = s.notes, !n.isEmpty { Text(n).font(.caption).foregroundStyle(.secondary) }
                                     }
-                                    .font(.subheadline.monospacedDigit())
                                 }
                             }
                         }
@@ -123,20 +143,43 @@ struct SessionDetailView: View {
                 }
             }
             .padding(.horizontal, 16)
+            .padding(.bottom, 30)
         }
+        .background(Theme.background)
         .navigationTitle(summary.title)
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            if let cached = app.details[summary.id] { detail = cached; return }
-            do { detail = try await APIClient.shared.get("/api/sessions/\(summary.id)") } catch { failed = true }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu { SessionActionButtons(summary: current, state: $actions) } label: { Image(systemName: "ellipsis.circle") }
+            }
         }
+        .sessionActionDialogs(current, state: $actions, onDeleted: { dismiss() })
+        .task { await load() }
+        .onChange(of: app.sessions.first { $0.id == summary.id }?.finishedAt) { _, _ in Task { await load(force: true) } }
     }
 
+    private func load(force: Bool = false) async {
+        if !force, let cached = app.details[summary.id] { detail = cached; return }
+        do {
+            let fresh: SessionDetail = try await APIClient.shared.get("/api/sessions/\(summary.id)")
+            detail = fresh
+            failed = false
+        } catch { failed = detail == nil }
+    }
+
+    /// Planned exercises first, then anything added during the workout.
     private func exerciseGroups(_ d: SessionDetail) -> [(Exercise, [SetEntry])] {
-        let exercises = (d.workout?.exercises ?? []).sorted { $0.order < $1.order }.map(\.exercise)
-        return exercises.compactMap { ex in
-            let sets = d.sets.filter { $0.exerciseId == ex.id }.sorted { $0.setNumber < $1.setNumber }
-            return sets.isEmpty ? nil : (ex, sets)
+        let planned = (d.workout?.exercises ?? []).sorted { $0.order < $1.order }.map(\.exercise)
+        var out: [(Exercise, [SetEntry])] = []
+        var seen = Set<String>()
+        func sets(for id: String) -> [SetEntry] { d.sets.filter { $0.exerciseId == id }.sorted { $0.setNumber < $1.setNumber } }
+        for ex in planned where !sets(for: ex.id).isEmpty && seen.insert(ex.id).inserted { out.append((ex, sets(for: ex.id))) }
+        let known = app.knownExercises
+        for id in d.sets.map(\.exerciseId) where seen.insert(id).inserted {
+            let ex = known[id] ?? Exercise(id: id, name: "Exercise", muscleGroup: "OTHER", category: "COMPOUND",
+                                           defaultRestSec: 90, usesBodyweight: false, equipmentType: "OTHER")
+            out.append((ex, sets(for: id)))
         }
+        return out
     }
 }

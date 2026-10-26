@@ -24,6 +24,14 @@ extension AppState {
     /// The workout to show in the "in progress" bar.
     var activeSession: SessionSummary? { openSessions.first }
 
+    /// Reloads only the active program (after the workout editor changed it).
+    func reloadProgram() async {
+        guard let list: [Program] = try? await APIClient.shared.get("/api/programs?active=true"), let active = list.first else {
+            return
+        }
+        if let full: Program = try? await APIClient.shared.get("/api/programs/\(active.id)") { program = full }
+    }
+
     /// A light refresh of just the session list (open workouts, their clocks).
     func reloadSessions() async {
         if let fresh: [SessionSummary] = try? await APIClient.shared.get("/api/sessions") { sessions = fresh }

@@ -81,6 +81,9 @@ struct SettingsView: View {
                     }
                     if let healthMessage { Text(healthMessage).font(.footnote).foregroundStyle(.secondary) }
                 }
+                Section("Training") {
+                    NavigationLink { ProgramsView() } label: { Label("My programs", systemImage: "list.bullet.rectangle") }
+                }
                 Section("Progress") {
                     NavigationLink("Achievements") { AchievementsView() }.hapticTap()
                     NavigationLink("Personal records") { RecordsView() }.hapticTap()

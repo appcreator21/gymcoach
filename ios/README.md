@@ -41,6 +41,28 @@ your programs, history, bodyweight and AI coach are all shared with the web app.
 Server: apply the new migration (`20261028090000_add_challenges`). Everything else
 uses the existing AI provider configuration.
 
+## Workout control
+
+- Pause and resume: pausing freezes the workout clock and the rest timer and covers
+  the screen. The pause is saved on the server, so it survives closing the app and
+  shows the same on every device. A reminder fires after 30 minutes paused.
+- Minimize a workout and keep using the app: a "workout in progress" bar sits above
+  the tab bar. Starting a different workout while one is open asks what to do.
+  A forgotten empty workout older than 12 hours is cleaned up automatically.
+- Edit any set: tap its number to change weight, reps, effort, warm-up, drop set
+  and notes. Long press for duplicate and delete (delete has Undo).
+- Offline safe logging: a set that cannot reach the server is kept on the phone,
+  marked as waiting, and sent automatically. Finishing waits until nothing is pending.
+- Change the workout on the fly: add, swap, remove and reorder exercises. When you
+  finish you can save those changes to the workout in your program.
+- Edit your programs: You > My programs. Rename, reorder, duplicate, activate or
+  delete programs and workouts, edit sets, reps, effort, rest and notes per exercise.
+- History: long press a workout (or use the menu) to edit it, change its notes or
+  delete it. Editing reopens it as a paused workout, and the time spent finished
+  is not counted as training time.
+
+Server: apply the migration `20261029090000_add_session_pause`.
+
 ## Admin access
 
 Set `ADMIN_EMAILS=you@example.com` in the server environment (comma separated),

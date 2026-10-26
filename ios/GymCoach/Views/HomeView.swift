@@ -183,6 +183,16 @@ struct HomeView: View {
                         Text(app.program?.name ?? "").font(.footnote).foregroundStyle(.secondary)
                     }
                     Spacer()
+                    if let programId = app.program?.id {
+                        NavigationLink {
+                            WorkoutEditorView(programId: programId, workoutId: workout.id)
+                        } label: {
+                            Image(systemName: "pencil").font(.footnote.weight(.bold)).frame(width: 32, height: 32)
+                                .background(Theme.field, in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Edit workout")
+                    }
                     Image(systemName: "bolt.fill").foregroundStyle(Theme.accent).font(.title2)
                 }
                 ForEach((workout.exercises ?? []).prefix(5)) { pe in
@@ -217,6 +227,7 @@ struct HomeView: View {
                     }
                     .buttonStyle(.plain)
                     .hapticTap()
+                    .sessionActions(s)
                 }
             }
         }

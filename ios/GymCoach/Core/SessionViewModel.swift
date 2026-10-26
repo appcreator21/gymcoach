@@ -154,10 +154,10 @@ final class SessionViewModel {
     }
 
     private func buildDrafts(existing: [SetEntry]) {
-        for pe in exercises { drafts[pe.id] = rows(for: pe, existing: existing) }
+        for pe in exercises { drafts[pe.id] = makeRows(for: pe, existing: existing) }
     }
 
-    private func rows(for pe: ProgramExercise, existing: [SetEntry]) -> [DraftSet] {
+    private func makeRows(for pe: ProgramExercise, existing: [SetEntry]) -> [DraftSet] {
         let cardio = pe.exercise.isCardio
         let done = existing.filter { $0.exerciseId == pe.exercise.id }.sorted { $0.setNumber < $1.setNumber }
         let warmups = done.filter(\.isWarmup).count
@@ -522,7 +522,7 @@ final class SessionViewModel {
         // A planned exercise that was skipped comes back instead of a copy.
         if let planned = (workout.exercises ?? []).first(where: { $0.exercise.id == ex.id }), ui.hidden.contains(planned.id) {
             ui.hidden.removeAll { $0 == planned.id }
-            drafts[planned.id] = rows(for: planned, existing: [])
+            drafts[planned.id] = makeRows(for: planned, existing: [])
             persistUI()
             Haptics.success()
             return
@@ -531,7 +531,7 @@ final class SessionViewModel {
         extras.append(pe)
         ui.extraExerciseIds.append(ex.id)
         ui.order = currentOrderIds()
-        drafts[pe.id] = rows(for: pe, existing: [])
+        drafts[pe.id] = makeRows(for: pe, existing: [])
         persistUI()
         Haptics.success()
     }
@@ -548,7 +548,7 @@ final class SessionViewModel {
         order.removeAll { $0 == pe.id }
         order.insert(replacement.id, at: min(position, order.count))
         ui.order = order
-        drafts[replacement.id] = rows(for: replacement, existing: [])
+        drafts[replacement.id] = makeRows(for: replacement, existing: [])
         persistUI()
         Haptics.success()
     }

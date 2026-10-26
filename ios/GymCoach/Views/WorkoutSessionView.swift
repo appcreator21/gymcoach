@@ -211,7 +211,7 @@ struct WorkoutSessionView: View {
                 }
             }
             Spacer(minLength: 4)
-            Button { Task { model.isPaused ? await model.resume() : await model.pause() } } label: {
+            Button { Task { if model.isPaused { await model.resume() } else { await model.pause() } } } label: {
                 Image(systemName: model.isPaused ? "play.fill" : "pause.fill").font(.headline).padding(10)
                     .background(Theme.card, in: Circle())
             }
