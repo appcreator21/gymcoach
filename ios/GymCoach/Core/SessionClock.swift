@@ -34,7 +34,3 @@ struct SessionClock: Hashable {
         return copy
     }
 }
-
-func formatClock(_ seconds: Int) -> String {
-    String(format: "%d:%02d:%02d", seconds / 3600, (seconds % 3600) / 60, seconds % 60)
-}

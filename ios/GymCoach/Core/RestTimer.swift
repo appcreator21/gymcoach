@@ -14,6 +14,8 @@ final class RestTimer {
 
     var isRunning: Bool { endDate != nil || isPaused }
     private(set) var isPaused = false
+    /// Called whenever the countdown starts, changes or stops (the Live Activity listens).
+    @ObservationIgnored var onStateChange: (() -> Void)?
     private var pausedRemaining: TimeInterval = 0
     var progress: Double { total > 0 ? 1 - remaining / total : 0 }
 
@@ -41,6 +43,7 @@ final class RestTimer {
         ticker = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             self?.tick()
         }
+        onStateChange?()
     }
 
     func adjust(by seconds: Int) {
@@ -49,6 +52,7 @@ final class RestTimer {
         total = max(1, total + TimeInterval(seconds))
         endDate = end.addingTimeInterval(TimeInterval(seconds))
         tick()
+        onStateChange?()
     }
 
     /// Freezes the countdown (the workout was paused). The time left is kept.
@@ -61,6 +65,7 @@ final class RestTimer {
         endDate = nil
         isPaused = true
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [RestTimer.notificationId])
+        onStateChange?()
     }
 
     /// Continues from the time that was left when it was paused.
@@ -79,6 +84,7 @@ final class RestTimer {
             UNNotificationRequest(identifier: RestTimer.notificationId, content: content,
                                   trigger: UNTimeIntervalNotificationTrigger(timeInterval: pausedRemaining, repeats: false)))
         ticker = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in self?.tick() }
+        onStateChange?()
     }
 
     func stop() {
@@ -89,6 +95,7 @@ final class RestTimer {
         endDate = nil
         remaining = 0
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [RestTimer.notificationId])
+        onStateChange?()
     }
 
     private func tick() {
@@ -99,6 +106,7 @@ final class RestTimer {
             ticker?.invalidate()
             ticker = nil
             endDate = nil
+            onStateChange?()
         }
     }
 }

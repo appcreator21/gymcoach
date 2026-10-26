@@ -34,7 +34,10 @@ extension AppState {
 
     /// A light refresh of just the session list (open workouts, their clocks).
     func reloadSessions() async {
-        if let fresh: [SessionSummary] = try? await APIClient.shared.get("/api/sessions") { sessions = fresh }
+        if let fresh: [SessionSummary] = try? await APIClient.shared.get("/api/sessions") {
+            sessions = fresh
+            syncSystemSurfaces()
+        }
     }
 
     /// Opened long ago and never used: almost certainly forgotten.

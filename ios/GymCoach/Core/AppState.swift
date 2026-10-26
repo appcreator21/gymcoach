@@ -27,6 +27,7 @@ final class AppState {
     var sessionLaunch: SessionLaunch?
     var startConflict: StartConflict?
     var orphanSession: SessionSummary?
+    var pendingLink: URL?
 
     @ObservationIgnored private let api = APIClient.shared
 
@@ -117,6 +118,7 @@ final class AppState {
         sessions = []
         details = [:]
         bodyweight = []
+        syncSystemSurfaces()
     }
 
     // MARK: Loading
@@ -141,6 +143,8 @@ final class AppState {
             }
             announcements = (try? await api.get("/api/announcements")) ?? []
             await loadDetails()
+            syncSystemSurfaces()
+            processPendingLink()
         } catch {
             loadError = error.localizedDescription
         }

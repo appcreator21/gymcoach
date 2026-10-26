@@ -31,6 +31,7 @@ final class SessionViewModel {
     @ObservationIgnored private var retryTask: Task<Void, Never>?
     @ObservationIgnored private var toastTask: Task<Void, Never>?
     @ObservationIgnored private var unsentClockAction: String?
+    @ObservationIgnored private var restPushTask: Task<Void, Never>?
     private static let pauseReminderId = "surbafit.paused"
 
     init(workout: Workout, sessionId: String?, app: AppState, timer: RestTimer) {
@@ -101,6 +102,9 @@ final class SessionViewModel {
             mergePending()
             if clock.isPaused { timer.stop() }
             if pendingCount > 0 { startRetryLoop() }
+            LiveActivityManager.shared.model = self
+            timer.onStateChange = { [weak self] in self?.pushActivity() }
+            pushActivity()
             await flushPending()
         } catch {
             startFailure = error.localizedDescription
@@ -332,6 +336,7 @@ final class SessionViewModel {
         if Prefs.bool(Prefs.autoRest, default: true), !isPaused {
             timer.start(seconds: created.isWarmup ? min(pe.restSec, 60) : pe.restSec)
         }
+        pushActivity()
     }
 
     private func unlog(_ pe: ProgramExercise, rowId: UUID, serverId: String) async {
@@ -341,6 +346,7 @@ final class SessionViewModel {
             logged[serverId] = nil
             mutate(pe.id, rowId) { $0.serverId = nil; $0.isPR = false; $0.isSaving = false }
             Haptics.tap()
+            pushActivity()
         } catch {
             mutate(pe.id, rowId) { $0.isSaving = false }
             warn("Could not remove the set. Check your connection and try again.")
@@ -364,6 +370,7 @@ final class SessionViewModel {
         }
         drafts[pe.id]?.removeAll { $0.id == rowId }
         Haptics.tap()
+        pushActivity()
         if row.isLogged {
             var restored = row
             restored.serverId = nil
@@ -420,6 +427,7 @@ final class SessionViewModel {
                 $0.isDropSet = updated.isDropSet ?? false; $0.note = cleanNote; $0.isSaving = false
             }
             Haptics.success()
+            pushActivity()
         } catch {
             mutate(pe.id, rowId) { $0.isSaving = false }
             warn(error.localizedDescription)
@@ -484,6 +492,7 @@ final class SessionViewModel {
     private func applySynced(_ created: SetEntry, pe: ProgramExercise, rowId: UUID) {
         logged[created.id] = created
         mutate(pe.id, rowId) { $0.serverId = created.id; $0.pendingKey = nil; $0.number = created.setNumber }
+        pushActivity()
     }
 
     private func locate(pendingKey: String) -> (String, UUID)? {
@@ -585,6 +594,7 @@ final class SessionViewModel {
         removeFromSession(pe)
         persistUI()
         Haptics.tap()
+        pushActivity()
     }
 
     func move(_ pe: ProgramExercise, up: Bool) {
@@ -607,6 +617,7 @@ final class SessionViewModel {
         timer.pause()
         schedulePauseReminder()
         Haptics.rigid()
+        pushActivity()
         await sendClock("pause", sessionId: sessionId, rollback: before)
     }
 
@@ -617,6 +628,7 @@ final class SessionViewModel {
         timer.resume()
         cancelPauseReminder()
         Haptics.rigid()
+        pushActivity()
         await sendClock("resume", sessionId: sessionId, rollback: before)
     }
 
@@ -631,6 +643,7 @@ final class SessionViewModel {
                 startRetryLoop()
             } else {
                 clock = rollback
+                pushActivity()
                 error = e.localizedDescription
             }
         } catch {
@@ -669,6 +682,39 @@ final class SessionViewModel {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [SessionViewModel.pauseReminderId])
     }
 
+    // MARK: Live Activity
+
+    private var currentExerciseName: String {
+        let next = exercises.first { pe in
+            let done = (drafts[pe.id] ?? []).filter { ($0.isLogged || $0.isPending) && !$0.isWarmup }.count
+            return done < pe.targetSets
+        }
+        return (next ?? exercises.last)?.exercise.name ?? workout.name
+    }
+
+    /// Writes the current state to the lock screen and Dynamic Island.
+    func pushActivity() {
+        guard let sessionId else { return }
+        let now = Date()
+        let restEnd = (!isPaused ? timer.endDate : nil).flatMap { $0 > now ? $0 : nil }
+        let state = WorkoutActivityAttributes.ContentState(
+            isPaused: isPaused,
+            activeSecondsAtUpdate: clock.activeSeconds(at: now),
+            updatedAt: now,
+            setsLogged: workingSets,
+            currentExercise: currentExerciseName,
+            restEndsAt: restEnd)
+        LiveActivityManager.shared.show(sessionId: sessionId, name: workout.name, state: state)
+        // Refresh once more when the rest is over so the countdown clears.
+        restPushTask?.cancel()
+        if let restEnd {
+            restPushTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(max(0, restEnd.timeIntervalSinceNow + 0.6) * 1_000_000_000))
+                if !Task.isCancelled { self?.pushActivity() }
+            }
+        }
+    }
+
     // MARK: Notes
 
     func saveNotes(_ text: String) async {
@@ -697,7 +743,10 @@ final class SessionViewModel {
             end.finishedAt = now
             finalActiveSeconds = end.activeSeconds(at: now)
             clock = end
+            timer.onStateChange = nil
             timer.stop()
+            restPushTask?.cancel()
+            LiveActivityManager.shared.end()
             cancelPauseReminder()
             retryTask?.cancel()
             SessionUIStore.clear(sessionId)
@@ -714,7 +763,10 @@ final class SessionViewModel {
     }
 
     func discard() async {
+        timer.onStateChange = nil
         timer.stop()
+        restPushTask?.cancel()
+        LiveActivityManager.shared.end()
         cancelPauseReminder()
         retryTask?.cancel()
         if let sessionId {

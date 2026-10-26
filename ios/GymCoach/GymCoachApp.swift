@@ -4,6 +4,14 @@ import SwiftUI
 struct GymCoachApp: App {
     @State private var app = AppState()
     @State private var restTimer = RestTimer()
+    @Environment(\.scenePhase) private var scenePhase
+
+    init() {
+        // The Live Activity pause button runs inside the app process.
+        LiveActivityBridge.handler = { sessionId, pause in
+            await LiveActivityManager.shared.handlePauseIntent(sessionId: sessionId, pause: pause)
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -13,6 +21,10 @@ struct GymCoachApp: App {
                 .preferredColorScheme(.dark)
                 .tint(Theme.accent)
                 .task { await app.bootstrap() }
+                .onOpenURL { app.handleDeepLink($0) }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .active, app.isSignedIn { Task { await app.reloadSessions() } }
+                }
         }
     }
 }
