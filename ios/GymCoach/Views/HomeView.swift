@@ -21,6 +21,7 @@ struct HomeView: View {
                     tiles
                     upNext
                     ExploreSection()
+                    FromSurbaSection()
                     recent
                 }
                 .padding(.horizontal, 16)

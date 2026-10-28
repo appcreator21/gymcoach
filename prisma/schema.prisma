@@ -660,3 +660,24 @@ model ChallengeEntry {
   @@id([challengeId, userId])
   @@index([userId])
 }
+
+// A video the coach published for the app: a workout demo, a technique tip,
+// a full session. The file itself lives on any HTTPS host (a CDN or storage
+// bucket); the app only stores the links. Exercise names are matched
+// case-insensitively to show a "watch demo" button inside a workout.
+model VideoClip {
+  id           String   @id @default(cuid())
+  title        String
+  description  String?  @db.Text
+  videoUrl     String
+  thumbnailUrl String?
+  category     String   @default("Workouts")
+  exerciseName String?
+  durationSec  Int?
+  featured     Boolean  @default(false)
+  createdById  String
+  createdAt    DateTime @default(now())
+
+  @@index([category, createdAt])
+  @@index([exerciseName])
+}

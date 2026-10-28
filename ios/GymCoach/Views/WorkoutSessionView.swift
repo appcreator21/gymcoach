@@ -317,9 +317,11 @@ struct ExerciseCard: View {
     @State private var showWarmup = false
     @State private var showRemove = false
     @State private var editing: DraftSet?
+    @State private var watching: VideoClip?
 
     var body: some View {
         let rows = model.drafts[pe.id] ?? []
+        let demo = app.demoVideo(for: pe.exercise.name)
         let isCardio = pe.exercise.isCardio
         let hasSets = model.hasLoggedSets(pe)
         let order = model.exercises.map(\.id)
@@ -337,6 +339,13 @@ struct ExerciseCard: View {
                         .font(.caption.monospacedDigit().weight(.semibold))
                         .padding(.horizontal, 8).padding(.vertical, 4)
                         .background(Color.white.opacity(0.08), in: Capsule())
+                    if let demo {
+                        Button { Haptics.select(); watching = demo } label: {
+                            Image(systemName: "play.fill").font(.caption.weight(.bold)).frame(width: 30, height: 30)
+                                .background(Theme.accent, in: Circle()).foregroundStyle(.black)
+                        }
+                        .accessibilityLabel("Watch demo")
+                    }
                     Menu {
                         if !isCardio { Button { showWarmup = true } label: { Label("Warm-up ramp", systemImage: "flame") } }
                         Button { onSwap(pe) } label: { Label("Swap exercise", systemImage: "arrow.triangle.2.circlepath") }
@@ -391,6 +400,7 @@ struct ExerciseCard: View {
                 .presentationDetents([.medium])
         }
         .sheet(item: $editing) { row in SetEditSheet(model: model, pe: pe, rowId: row.id) }
+        .fullScreenCover(item: $watching) { VideoPlayerScreen(clip: $0) }
         .confirmationDialog("Remove \(pe.exercise.name)?", isPresented: $showRemove, titleVisibility: .visible) {
             if hasSets {
                 Button("Delete its sets and remove", role: .destructive) { Task { await model.remove(pe, deleteSets: true) } }

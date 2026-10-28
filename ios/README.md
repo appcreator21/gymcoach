@@ -82,6 +82,34 @@ automatically with a paid account. If you change the bundle id, change the group
 in `project.yml` and `Shared/WidgetSnapshot.swift` to match. Live Activities need
 iOS 17 and "Live Activities" enabled in Settings > Surba Fit.
 
+## Surba's videos
+
+The app has a video library (Explore > Surba's videos), a "From Surba" card on Today,
+and a play button on any exercise that has a demo linked to it. Videos are links to
+files you host, so the app and server stay small.
+
+Adding videos (admin):
+1. Get the original files. For Instagram reels you own, use Instagram > Settings >
+   Accounts Center > Your information and permissions > Download your information
+   (choose Reels), or the original files from your camera roll. Only publish videos
+   you or Surba have the rights to.
+2. Convert each to an iPhone friendly MP4 and make a thumbnail (needs ffmpeg):
+
+   ```bash
+   ffmpeg -i reel.mp4 -c:v libx264 -preset slow -crf 23 -vf "scale=-2:1280" \
+     -c:a aac -b:a 128k -movflags +faststart clip.mp4
+   ffmpeg -i clip.mp4 -ss 00:00:01 -frames:v 1 -vf "scale=-2:960" -q:v 3 clip.jpg
+   ```
+   `+faststart` lets playback begin before the whole file downloads.
+3. Upload the MP4 and JPG to any HTTPS host. A Cloudflare R2 bucket with public
+   access (or a custom domain on it) works well and has no download fees.
+4. In the app: You > Admin portal > Videos > +. Paste the video link and optional
+   thumbnail link, pick a category, mark one as Featured for Today, and type an
+   exercise name (for example "Barbell Back Squat") to show the demo button inside
+   that exercise. Without a thumbnail link the app uses the video's first frame.
+
+Server: apply the migration `20261030090000_add_video_clips`.
+
 ## Admin access
 
 Set `ADMIN_EMAILS=you@example.com` in the server environment (comma separated),

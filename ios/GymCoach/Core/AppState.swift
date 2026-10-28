@@ -19,6 +19,7 @@ final class AppState {
     var details: [String: SessionDetail] = [:]
     var bodyweight: [BodyweightEntry] = []
     var announcements: [Announcement] = []
+    var videos: [VideoClip] = []
     var dismissedAnnouncements: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "dismissedAnnouncements") ?? [])
     var isLoading = false
     var loadError: String?
@@ -142,6 +143,7 @@ final class AppState {
                 program = nil
             }
             announcements = (try? await api.get("/api/announcements")) ?? []
+            videos = (try? await api.get("/api/videos")) ?? videos
             await loadDetails()
             syncSystemSurfaces()
             processPendingLink()

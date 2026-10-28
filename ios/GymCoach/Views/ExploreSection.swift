@@ -10,6 +10,7 @@ struct ExploreSection: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     card("Quick workout", "Any gear, any time", icon: "bolt.fill") { QuickWorkoutView() }
+                    card("Surba's videos", "Workouts and tips", icon: "play.rectangle.fill") { VideosView() }
                     card("Plan with Surba", "Build a full program", icon: "wand.and.stars") { PlanBuilderView() }
                     card("Classes", "HIIT, yoga, mobility", icon: "figure.yoga") { ClassesView() }
                     card("Challenges", "Compete and climb", icon: "flag.checkered") { ChallengesView() }
