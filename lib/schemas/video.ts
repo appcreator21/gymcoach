@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { STORAGE_KEY_PATTERN } from '@/lib/storage';
 
 export const VIDEO_CATEGORIES = ['Workouts', 'Technique', 'Tips', 'Mobility', 'Nutrition', 'Motivation'] as const;
 
@@ -25,6 +26,10 @@ export const videoInputSchema = z.object({
   thumbnailUrl: z.preprocess(emptyToNull, httpsUrl.nullable().optional()),
   category: z.string().trim().min(1).max(40).default('Workouts'),
   exerciseName: z.preprocess(emptyToNull, z.string().trim().max(120).nullable().optional()),
+  workoutName: z.preprocess(emptyToNull, z.string().trim().max(120).nullable().optional()),
+  // Set by the app after an upload. Absent leaves the stored keys alone.
+  storageKey: z.string().regex(STORAGE_KEY_PATTERN).nullable().optional(),
+  thumbnailKey: z.string().regex(STORAGE_KEY_PATTERN).nullable().optional(),
   durationSec: z.preprocess(emptyToNull, z.coerce.number().int().min(1).max(14_400).nullable().optional()),
   featured: z.boolean().optional().default(false),
 });

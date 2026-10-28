@@ -85,30 +85,41 @@ iOS 17 and "Live Activities" enabled in Settings > Surba Fit.
 ## Surba's videos
 
 The app has a video library (Explore > Surba's videos), a "From Surba" card on Today,
-and a play button on any exercise that has a demo linked to it. Videos are links to
-files you host, so the app and server stay small.
+a play button on any exercise that has a demo linked to it, and a walkthrough button
+on any workout that has one linked.
 
-Adding videos (admin):
-1. Get the original files. For Instagram reels you own, use Instagram > Settings >
-   Accounts Center > Your information and permissions > Download your information
-   (choose Reels), or the original files from your camera roll. Only publish videos
-   you or Surba have the rights to.
-2. Convert each to an iPhone friendly MP4 and make a thumbnail (needs ffmpeg):
+Adding a video (You > Admin portal > Videos > +):
+- Upload: choose a video from Photos or Files. The app converts it to an iPhone
+  friendly MP4 (index at the front, so playback starts straight away), makes a
+  thumbnail, and uploads both straight to your storage with a short lived signed
+  link, with a progress bar. Up to 500 MB.
+- Link: paste an https link to a video you host elsewhere. This works with no
+  storage set up at all, and a video can be switched between the two later.
+- Link it: type or pick an exercise name (demo button inside that exercise) and/or
+  a workout name (walkthrough button on that workout). Names match without caring
+  about capitals or punctuation. Mark one video Featured to put it on Today.
+- Deleting a video, or replacing its file, also removes the old file from storage.
 
-   ```bash
-   ffmpeg -i reel.mp4 -c:v libx264 -preset slow -crf 23 -vf "scale=-2:1280" \
-     -c:a aac -b:a 128k -movflags +faststart clip.mp4
-   ffmpeg -i clip.mp4 -ss 00:00:01 -frames:v 1 -vf "scale=-2:960" -q:v 3 clip.jpg
-   ```
-   `+faststart` lets playback begin before the whole file downloads.
-3. Upload the MP4 and JPG to any HTTPS host. A Cloudflare R2 bucket with public
-   access (or a custom domain on it) works well and has no download fees.
-4. In the app: You > Admin portal > Videos > +. Paste the video link and optional
-   thumbnail link, pick a category, mark one as Featured for Today, and type an
-   exercise name (for example "Barbell Back Squat") to show the demo button inside
-   that exercise. Without a thumbnail link the app uses the video's first frame.
+Uploads stay switched off until storage is configured, and the editor says so and
+points to the link option. To turn them on, set up Cloudflare R2:
+1. Create a bucket (Cloudflare dashboard > R2). Give it a public link: either turn on
+   the r2.dev link, or attach a custom domain such as videos.yourdomain.com.
+2. R2 > Manage API tokens > Create token with Object Read and Write on that bucket.
+   Copy the Access Key ID and Secret Access Key.
+3. Give the server these settings (see `.env.example`). On Cloudflare Workers, set
+   the secret ones with `wrangler secret put` and the rest as vars:
+   `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` (secret), `R2_BUCKET`,
+   `R2_PUBLIC_BASE_URL` (no trailing slash).
+4. Redeploy. Open Admin > Videos > +: the Upload section now shows the picker.
+No CORS setup is needed because the app is native, and files never pass through
+the app server.
 
-Server: apply the migration `20261030090000_add_video_clips`.
+Instagram reels: only use videos you or Surba own. Download them from Instagram's own
+"Download your information" (Settings > Accounts Center > Your information and
+permissions) or use the camera roll originals, then upload them as above.
+
+Server: apply the migrations `20261030090000_add_video_clips` and
+`20261031090000_video_links_and_storage`.
 
 ## Admin access
 

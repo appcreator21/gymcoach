@@ -17,6 +17,7 @@ export async function GET() {
         thumbnailUrl: true,
         category: true,
         exerciseName: true,
+        workoutName: true,
         durationSec: true,
         featured: true,
         createdAt: true,

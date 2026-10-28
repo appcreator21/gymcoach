@@ -673,6 +673,12 @@ model VideoClip {
   thumbnailUrl String?
   category     String   @default("Workouts")
   exerciseName String?
+  // Shows a walkthrough button on any workout with this name (matched loosely).
+  workoutName  String?
+  // Object keys when the files were uploaded to storage (lib/storage.ts), so
+  // they can be removed with the video. Null for videos added by link.
+  storageKey   String?
+  thumbnailKey String?
   durationSec  Int?
   featured     Boolean  @default(false)
   createdById  String

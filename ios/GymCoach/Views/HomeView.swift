@@ -3,6 +3,7 @@ import SwiftUI
 struct HomeView: View {
     @Environment(AppState.self) private var app
     @State private var showNext = false
+    @State private var walkthroughClip: VideoClip?
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -33,6 +34,7 @@ struct HomeView: View {
             }
             .navigationTitle(greeting)
             .scrollContentBackground(.hidden)
+            .fullScreenCover(item: $walkthroughClip) { VideoPlayerScreen(clip: $0) }
             .overlay {
                 if app.isLoading && app.program == nil { ProgressView() }
             }
@@ -184,6 +186,14 @@ struct HomeView: View {
                         Text(app.program?.name ?? "").font(.footnote).foregroundStyle(.secondary)
                     }
                     Spacer()
+                    if let walkthrough = app.workoutVideo(for: workout.name) {
+                        Button { Haptics.select(); walkthroughClip = walkthrough } label: {
+                            Image(systemName: "play.fill").font(.footnote.weight(.bold)).frame(width: 32, height: 32)
+                                .background(Theme.accent, in: Circle()).foregroundStyle(.black)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Watch walkthrough")
+                    }
                     if let programId = app.program?.id {
                         NavigationLink {
                             WorkoutEditorView(programId: programId, workoutId: workout.id)

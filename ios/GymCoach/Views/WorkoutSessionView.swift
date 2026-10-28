@@ -18,6 +18,7 @@ struct WorkoutSessionView: View {
     @State private var swapTarget: ProgramExercise?
     @State private var summary: WorkoutSummary?
     @State private var finishing = false
+    @State private var walkthrough: VideoClip?
 
     var body: some View {
         ZStack {
@@ -161,6 +162,7 @@ struct WorkoutSessionView: View {
         .sheet(item: $summary, onDismiss: { dismiss() }) { WorkoutSummaryView(summary: $0) }
         .sheet(isPresented: $showPlates) { PlateCalculatorView().presentationDetents([.medium, .large]) }
         .sheet(isPresented: $showNotes) { WorkoutNotesSheet(model: model) }
+        .fullScreenCover(item: $walkthrough) { VideoPlayerScreen(clip: $0) }
         .sheet(isPresented: $showAddExercise) {
             ExercisePickerSheet(excluding: Set(model.exercises.map(\.exercise.id)), title: "Add exercise") { model.addExercise($0) }
         }
@@ -218,6 +220,9 @@ struct WorkoutSessionView: View {
             .accessibilityLabel(model.isPaused ? "Resume workout" : "Pause workout")
             Menu {
                 Button { showAddExercise = true } label: { Label("Add exercise", systemImage: "plus") }
+                if let clip = app.workoutVideo(for: workout.name) {
+                    Button { walkthrough = clip } label: { Label("Watch walkthrough", systemImage: "play.rectangle") }
+                }
                 Button { showNotes = true } label: { Label("Workout notes", systemImage: "note.text") }
                 Button { showPlates = true } label: { Label("Plate calculator", systemImage: "circle.grid.2x2") }
                 Divider()

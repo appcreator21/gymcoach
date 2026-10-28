@@ -31,6 +31,19 @@ describe('videoInputSchema', () => {
   });
 });
 
+describe('video links and storage keys', () => {
+  it('accepts a workout link and generated keys', () => {
+    const v = videoInputSchema.parse({ ...base, workoutName: ' Upper A ', storageKey: 'videos/a1b2c3d4-e5f6/clip.mp4' });
+    expect(v.workoutName).toBe('Upper A');
+    expect(v.storageKey).toBe('videos/a1b2c3d4-e5f6/clip.mp4');
+  });
+
+  it('rejects keys that do not look generated', () => {
+    expect(videoInputSchema.safeParse({ ...base, storageKey: '../../secret.mp4' }).success).toBe(false);
+    expect(videoInputSchema.safeParse({ ...base, thumbnailKey: 'videos/x/y.mp4' }).success).toBe(false);
+  });
+});
+
 describe('normalizeExerciseName', () => {
   it('matches across case and punctuation', () => {
     expect(normalizeExerciseName('Barbell Back-Squat')).toBe(normalizeExerciseName('barbell back squat'));

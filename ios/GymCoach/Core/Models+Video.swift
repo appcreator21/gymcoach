@@ -11,6 +11,11 @@ struct VideoClip: Codable, Identifiable, Hashable {
     let durationSec: Int?
     let featured: Bool
     let createdAt: Date
+    /// Shows a walkthrough button on a workout with this name.
+    var workoutName: String? = nil
+    /// Storage keys, present on admin lists for videos that were uploaded.
+    var storageKey: String? = nil
+    var thumbnailKey: String? = nil
 
     var url: URL? { URL(string: videoUrl) }
     var thumbnail: URL? { thumbnailUrl.flatMap { URL(string: $0) } }
@@ -31,6 +36,12 @@ extension AppState {
     func demoVideo(for exerciseName: String) -> VideoClip? {
         let key = AppState.normalizedName(exerciseName)
         return videos.first { $0.exerciseName.map(AppState.normalizedName) == key }
+    }
+
+    /// A walkthrough the coach linked to this workout, if any.
+    func workoutVideo(for workoutName: String) -> VideoClip? {
+        let key = AppState.normalizedName(workoutName)
+        return videos.first { $0.workoutName.map(AppState.normalizedName) == key }
     }
 
     var featuredVideo: VideoClip? { videos.first { $0.featured } ?? videos.first }
